@@ -38,6 +38,10 @@ void test_tensor(int batch_size, int img_size, int embed_dim, int in_channel, in
     // TensorMap input_tensor({{"ffn_input", input_tensors.at(0)}});
     // TensorMap output_tensor({{"ffn_output", output_tensors.at(0)}});
     printf("Input_tensor size: [%ld, %ld, %ld, %ld]\n", input_batch_size, input_chn_num, input_img_size, input_img_size);
+
+    // free data
+    check_cuda_error(cudaFree(input_d));
+    check_cuda_error(cudaFree(output_d));
 }
 
 int main(int argc, char *argv[]) {
