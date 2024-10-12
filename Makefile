@@ -29,6 +29,9 @@ debug :
 
 test :
 	# @cd test/cpu && python Test.py
+	
+test_tensor:
+	@cd build/bin && ./test_tensor 1 224 768 12 768 0
 
 check-python:
 	@command -v python3 >/dev/null 2>&1 || { echo >&2 "Python is not installed.  Aborting."; exit 1; }

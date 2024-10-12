@@ -9,3 +9,9 @@
 make
 ```
 
+## 测试方法
+```shell
+# 测试tensor的方法
+make && make test_tensor
+```
+
