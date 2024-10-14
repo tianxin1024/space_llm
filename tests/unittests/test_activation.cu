@@ -55,6 +55,57 @@ void testActivationKernel(TestCase tc) {
     bool passed = checkResult(tc.name, output_baseline, output_opt1, m * n, true, true);
     QK_CHECK(passed);
 
+    const int ite = tc.ite;
+    CudaTimer cuda_timer_baseline(stream);
+    // warmup
+    for (int i = 0; i < ite; i++) {
+        invokeGenericActivation<GeluActivation>(output_baseline,
+                                                (const T *)bias,
+                                                (const T *)nullptr,
+                                                (const T *)nullptr,
+                                                (const int *)nullptr,
+                                                (const T *)nullptr,
+                                                m,
+                                                n,
+                                                0,
+                                                (const float *)nullptr,
+                                                (const float *)nullptr,
+                                                stream);
+    }
+    cuda_timer_baseline.start();
+    for (int i = 0; i < ite; i++) {
+        invokeGenericActivation<GeluActivation>(output_baseline,
+                                                (const T *)bias,
+                                                (const T *)nullptr,
+                                                (const T *)nullptr,
+                                                (const int *)nullptr,
+                                                (const T *)nullptr,
+                                                m,
+                                                n,
+                                                0,
+                                                (const float *)nullptr,
+                                                (const float *)nullptr,
+                                                stream);
+    }
+    float total_time_baseline = cuda_timer_baseline.stop();
+
+    CudaTimer cuda_timer_opt(stream);
+    // warmup
+    for (int i = 0; i < ite; i++) {
+        invokeAddBiasGeluV2(output_baseline, bias, (const int *)nullptr, (const T *)nullptr, m, n, stream);
+    }
+    cuda_timer_opt.start();
+    for (int i = 0; i < ite; i++) {
+        invokeAddBiasGeluV2(output_baseline, bias, (const int *)nullptr, (const T *)nullptr, m, n, stream);
+    }
+    float total_time_opt = cuda_timer_opt.stop();
+    QK_LOG_INFO("%s baseline_time: %f us, opt_time: %f us, speedup: %f (ite: %d)",
+                tc.toString().c_str(),
+                total_time_baseline / ite * 1000.f,
+                total_time_opt / ite * 1000.f,
+                total_time_baseline / total_time_opt,
+                ite);
+
     deviceFree(output_baseline);
     deviceFree(output_opt1);
     deviceFree(bias);
@@ -66,10 +117,28 @@ int main() {
     std::vector<TestCase> test_cases = {
         // TC : name / m / n
         TestCase{"addBiasGelu", 32, 1024, 1000},
+        TestCase{"addBiasGelu", 128, 1024, 1000},
+        TestCase{"addBiasGelu", 2048, 1024, 1000},
+        TestCase{"addBiasGelu", 32, 3072, 1000},
+        TestCase{"addBiasGelu", 128, 3072, 1000},
+        TestCase{"addBiasGelu", 2048, 3072, 1000},
+        TestCase{"addBiasGelu", 32, 4096, 1000},
+        TestCase{"addBiasGelu", 128, 4096, 1000},
+        TestCase{"addBiasGelu", 2048, 4096, 1000},
+        TestCase{"addBiasGelu", 32, 8192, 1000},
+        TestCase{"addBiasGelu", 128, 8192, 1000},
+        TestCase{"addBiasGelu", 2048, 8192, 1000},
+        TestCase{"addBiasGelu", 32, 49152, 1000},
+        TestCase{"addBiasGelu", 128, 49152, 1000},
+        TestCase{"addBiasGelu", 2048, 49152, 1000},
+        TestCase{"addBiasGelu", 32, 81920, 1000},
+        TestCase{"addBiasGelu", 128, 81920, 1000},
+        TestCase{"addBiasGelu", 2048, 81920, 1000},
     };
 
     for (auto &tc : test_cases) {
-        testActivationKernel<float>(tc);
+        // testActivationKernel<float>(tc);
+        testActivationKernel<half>(tc);
     }
 
     QK_LOG_INFO("testActivationKernel done!!!");
