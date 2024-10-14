@@ -9,14 +9,20 @@
 make
 ```
 
-## 测试方法
+## 添加编译链接选项
 ```shell
-# 测试tensor的方法
-make && make test_tensor
+# 由于cuda对compile_commands.json有点冲突，暂时不添加compile_commands.json配置文件
+source source
 ```
-### 测试结果
+
+## 单元测试方法
 ```shell
-$ make test_tensor
+# 添加单元测试
+make && make unittest
+```
+### 示例展示方法
+```shell
+$ make && make demo_tensor
 Device NVIDIA GeForce RTX 3070 Ti Laptop GPU
 Input_tensor size: [1, 12, 224, 224]
 ```

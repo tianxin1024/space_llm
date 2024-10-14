@@ -27,17 +27,16 @@ run :
 debug :
 	@cd build/bin && gdb -x ./init.gdb
 
-test :
-	# @cd test/cpu && python Test.py
+unittest :
+	@cd build/bin && ./unittest
 	
-test_tensor:
-	@cd build/bin && ./test_tensor 1 224 768 12 768 0
+demo_tensor:
+	@cd build/bin && ./demo_tensor 1 224 768 12 768 0
 
 check-python:
 	@command -v python3 >/dev/null 2>&1 || { echo >&2 "Python is not installed.  Aborting."; exit 1; }
 
 clean:
 	read -r -p "This will delete the contents of build/*. Are you sure? [CRAL-C to abort]" response && rm -rf build/*
-
 
 .PHONY: all run test clean check-python
