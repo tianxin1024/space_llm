@@ -195,6 +195,15 @@ static double diffTime(timeval start, timeval end) {
 
 /* ***************************** common utils ****************************** */
 
+inline void print_mem_usage(std::string time = "after allocation") {
+    size_t free_bytes, total_bytes;
+    check_cuda_error(cudaMemGetInfo(&free_bytes, &total_bytes));
+    float free = static_cast<float>(free_bytes) / 1024.0 / 1024.0 / 1024.0;
+    float total = static_cast<float>(total_bytes) / 1024.0 / 1024.0 / 1024.0;
+    float used = total - free;
+    printf("%-20s: free: %5.2f GB, total: %5.2f GB, used: %5.2f GB\n", time.c_str(), free, total, used);
+}
+
 inline int getSMVersion() {
     int device{-1};
     check_cuda_error(cudaGetDevice(&device));
@@ -203,6 +212,26 @@ inline int getSMVersion() {
     check_cuda_error(cudaDeviceGetAttribute(&sm_major, cudaDevAttrComputeCapabilityMajor, device));
     check_cuda_error(cudaDeviceGetAttribute(&sm_minor, cudaDevAttrComputeCapabilityMinor, device));
     return sm_major * 10 + sm_minor;
+}
+
+inline int getMaxSharedMemoryPerBlock() {
+    int device{-1};
+    check_cuda_error(cudaGetDevice(&device));
+    int max_shared_memory_size = 0;
+    check_cuda_error(cudaDeviceGetAttribute(&max_shared_memory_size, cudaDevAttrMaxSharedMemoryPerBlock, device));
+    return max_shared_memory_size;
+}
+
+inline std::string getDeviceName() {
+    int device{-1};
+    check_cuda_error(cudaGetDevice(&device));
+    cudaDeviceProp props;
+    check_cuda_error(cudaGetDeviceProperties(&props, device));
+    return std::string(props.name);
+}
+
+inline int div_up(int a, int n) {
+    return (a + n - 1) / n;
 }
 
 cudaError_t getSetDevice(int i_device, int *o_device = NULL);

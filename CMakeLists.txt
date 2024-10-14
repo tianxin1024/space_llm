@@ -25,9 +25,11 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(COMMON_LIB_DIRS 
     ${CUDA_PATH}/lib64)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_75,code=compute_75 -gencode arch=compute_80,code=compute_80 -gencode arch=compute_86,code=compute_86")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler=-Wall -Xcompiler=-Wextra -Xcompiler=-fPIC --expt-extended-lambda")
-message(STATUS "CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -w -Xcompiler=-Wall -Xcompiler=-Wextra -Xcompiler=-fPIC --expt-extended-lambda")
+# message(STATUS "CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
 
 include_directories(${CUDA_HEADER_DIRS})
 link_directories(${COMMON_LIB_DIRS})

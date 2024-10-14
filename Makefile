@@ -29,6 +29,9 @@ debug :
 
 unittest :
 	@cd build/bin && ./unittest
+
+test_activation:
+	@cd build/bin && ./test_activation
 	
 demo_tensor:
 	@cd build/bin && ./demo_tensor 1 224 768 12 768 0
