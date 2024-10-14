@@ -38,9 +38,6 @@ void testActivationKernel(TestCase tc) {
     deviceMalloc(&output_baseline, m * n);
     deviceMalloc(&output_opt1, m * n);
     deviceMalloc(&bias, n);
-
-    printf("---------------------\n");
-
     cudaD2Dcpy(output_opt1, output_baseline, m * n);
     invokeGenericActivation<GeluActivation>(output_baseline,
                                             (const T *)bias,
@@ -54,14 +51,9 @@ void testActivationKernel(TestCase tc) {
                                             (const float *)nullptr,
                                             (const float *)nullptr,
                                             stream);
-    printf("---------------------\n");
     invokeAddBiasGeluV2(output_opt1, bias, (const int *)nullptr, (const T *)nullptr, m, n, stream);
-    printf("---------------------\n");
     bool passed = checkResult(tc.name, output_baseline, output_opt1, m * n, true, true);
-    printf("---------------------\n");
-
     QK_CHECK(passed);
-    printf("---------------------\n");
 
     deviceFree(output_baseline);
     deviceFree(output_opt1);

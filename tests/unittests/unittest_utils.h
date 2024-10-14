@@ -35,6 +35,7 @@ template <typename T>
 bool checkResult(std::string name, T *out, T *ref, size_t size, float atol, float rtol) {
     size_t failures = 0;
     float relative_gap = 0.0f;
+    ;
 
     for (size_t i = 0; i < size; ++i) {
         // The values for the output and the reference.
@@ -55,4 +56,42 @@ bool checkResult(std::string name, T *out, T *ref, size_t size, float atol, floa
         // Update the relative gap.
         relative_gap += fabsf(a - b) / (fabsf(b) + EPSILON);
     }
+
+    relative_gap /= size;
+
+    // Allow not matched up to 1% elements.
+    size_t tol_failures = (size_t)(0.01 * size);
+    QK_LOG_INFO("check...%6s : %-50s (failures: %.2f%% atol: %.2e rtol: %.2e rel_gap: %.2e%%)",
+                failures <= tol_failures ? "....OK" : "FAILED", name.c_str(),
+                100. * failures / size, atol, rtol, 100. * relative_gap);
+    return failures <= tol_failures;
+}
+
+template <typename T>
+bool checkResult(std::string name, T *out, T *ref, size_t size,
+                 bool device_out = true, bool device_ref = false) {
+    bool is_fp32 = sizeof(T) == 4;
+    float atol = is_fp32 ? 1e-4f : 1e-3f;
+    float rtol = is_fp32 ? 1e-2f : 1e-1f;
+
+    T *h_out = nullptr;
+    if (device_out) {
+        h_out = new T[size];
+        cudaMemcpy(h_out, out, sizeof(T) * size, cudaMemcpyDeviceToHost);
+        out = h_out;
+    }
+    T *h_ref = nullptr;
+    if (device_ref) {
+        h_ref = new T[size];
+        cudaMemcpy(h_ref, ref, sizeof(T) * size, cudaMemcpyDeviceToHost);
+        ref = h_ref;
+    }
+    bool is_ok = checkResult(name, out, ref, size, atol, rtol);
+    if (h_out != nullptr) {
+        delete[] h_out;
+    }
+    if (h_ref != nullptr) {
+        delete[] h_ref;
+    }
+    return is_ok;
 }
