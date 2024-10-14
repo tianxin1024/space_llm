@@ -154,6 +154,106 @@ struct Tensor {
         }
     }
 
+    template <typename T>
+    void print() const {
+        if (getTensorType<T>() != type) {
+            QK_LOG_DEBUG("getVal with type %s, but data type is: %s",
+                         getNumpyTypeDesc(getTensorType<T>()).c_str(),
+                         getNumpyTypeDesc(type).c_str());
+        }
+        QK_CHECK_WITH_INFO(shape.size() > 0 && data != nullptr, "Should be a non-empty tensor.");
+        QK_CHECK_WITH_INFO(where == MEMORY_CPU || where == MEMORY_CPU_PINNED,
+                           "max() supports MEMORY_CPU or MEMORY_CPU_PINNED tensor.");
+
+        for (size_t i = 1; i < size(); ++i) {
+            T val = getVal<T>(i);
+            std::cout << val << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    template <typename T>
+    T max() const {
+        if (getTensorType<T>() != type) {
+            QK_LOG_DEBUG("getVal with type %s, but data type is: %s",
+                         getNumpyTypeDesc(getTensorType<T>()).c_str(),
+                         getNumpyTypeDesc(type).c_str());
+        }
+        QK_CHECK_WITH_INFO(shape.size() > 0 && data != nullptr, "Should be a non-empty tensor.");
+        QK_CHECK_WITH_INFO(where == MEMORY_CPU || where == MEMORY_CPU_PINNED,
+                           "max() supports MEMORY_CPU or MEMORY_CPU_PINNED tensor.");
+        size_t max_idx = 0;
+        T max_val = getVal<T>(max_idx);
+        for (size_t i = 1; i < size(); ++i) {
+            T val = getVal<T>(i);
+            if (val > max_val) {
+                max_idx = i;
+                max_val = val;
+            }
+        }
+        return max_val;
+    }
+
+    template <typename T>
+    T min() const {
+        if (getTensorType<T>() != type) {
+            QK_LOG_DEBUG("getVal with type %s, but data type is: %s",
+                         getNumpyTypeDesc(getTensorType<T>()).c_str(),
+                         getNumpyTypeDesc(type).c_str());
+        }
+        QK_CHECK_WITH_INFO(shape.size() > 0 && data != nullptr, "Should be a non-empty tensor.");
+        QK_CHECK_WITH_INFO(where == MEMORY_CPU || where == MEMORY_CPU_PINNED,
+                           "min() supports MEMORY_CPU or MEMORY_CPU_PINNED tensor.");
+        size_t min_idx = 0;
+        T min_val = getVal<T>(min_idx);
+        for (size_t i = 1; i < size(); ++i) {
+            T val = getVal<T>(i);
+            if (val < min_val) {
+                min_idx = i;
+                min_val = val;
+            }
+        }
+        return min_val;
+    }
+
+    template <typename T>
+    T any(T val) const {
+        if (getTensorType<T>() != type) {
+            QK_LOG_DEBUG("getVal with type %s, but data type is: %s",
+                         getNumpyTypeDesc(getTensorType<T>()).c_str(),
+                         getNumpyTypeDesc(type).c_str());
+        }
+        QK_CHECK_WITH_INFO(shape.size() > 0 && data != nullptr, "Should be a non-empty tensor.");
+        QK_CHECK_WITH_INFO(where == MEMORY_CPU || where == MEMORY_CPU_PINNED,
+                           "any() supports MEMORY_CPU or MEMORY_CPU_PINNED tensor.");
+        for (size_t i = 0; i < size(); ++i) {
+            if (getVal<T>(i) == val) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template <typename T>
+    T all(T val) const {
+        if (getTensorType<T>() != type) {
+            QK_LOG_DEBUG("getVal with type %s, but data type is: %s",
+                         getNumpyTypeDesc(getTensorType<T>()).c_str(),
+                         getNumpyTypeDesc(type).c_str());
+        }
+        QK_CHECK_WITH_INFO(shape.size() > 0 && data != nullptr, "Should be a non-empty tensor.");
+        QK_CHECK_WITH_INFO(where == MEMORY_CPU || where == MEMORY_CPU_PINNED,
+                           "all() supports MEMORY_CPU or MEMORY_CPU_PINNED tensor.");
+        for (size_t i = 0; i < size(); ++i) {
+            if (getVal<T>(i) != val) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    Tensor slice(std::vector<size_t> shape, size_t offset = 0) const;
+
 }; // struct Tensor
 
 class TensorMap {
@@ -300,6 +400,24 @@ public:
         }
         return default_value;
     }
+
+    template <typename T>
+    inline T getValWithOffset(const std::string &key, size_t index) const {
+        QK_CHECK_WITH_INFO(isExist(key),
+                           fmtstr("Cannot find a tensor of name %s in the tensor map (keys: %s)",
+                                  key.c_str(),
+                                  vec2str(keys()).c_str()));
+        return tensor_map_.at(key).getVal<T>(index);
+    }
+
+    template <typename T>
+    inline T getValWithOffset(const std::string &key, size_t index, T default_value) const {
+        if (isExist(key)) {
+            return tensor_map_.at(key).getVal<T>(index);
+        }
+        return default_value;
+    }
+
 }; // class TensorMap
 
 } // namespace space_llm

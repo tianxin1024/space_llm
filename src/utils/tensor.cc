@@ -100,6 +100,19 @@ size_t Tensor::getTypeSize(DataType type) {
     return type_map.at(type);
 }
 
+Tensor Tensor::slice(std::vector<size_t> shape, size_t offset) const {
+    if (this->data != nullptr) {
+        size_t n_elts = this->size();
+        size_t n_sliced_elts = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+        QK_CHECK_WITH_INFO(
+            n_sliced_elts + offset <= n_elts,
+            fmtstr("The number (%ld) of elements of sliced tensor exceeds that (%ld) of the original tensor",
+                   n_sliced_elts + offset,
+                   n_elts));
+    }
+    return Tensor(this->where, this->type, shape, this->getPtrWithOffset(offset));
+}
+
 TensorMap::TensorMap(const std::unordered_map<std::string, Tensor> &tensor_map) {
     for (auto &kv : tensor_map) {
         if (isValid(kv.second)) {

@@ -6,6 +6,8 @@
 
 #include "utils/string_utils.h"
 
+// #define NDEBUG 0
+
 namespace space_llm {
 
 class Logger {
