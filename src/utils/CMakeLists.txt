@@ -29,3 +29,10 @@ add_library(cublasMMWrapper STATIC cublasMMWrapper.cc)
 set_property(TARGET cublasMMWrapper PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET cublasMMWrapper PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(cublasMMWrapper PUBLIC -lcublas -lcudart -lcurand cublasAlgoMap cuda_utils logger)
+
+add_library(gemm STATIC gemm.cc)
+set_property(TARGET gemm PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET gemm PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(gemm PUBLIC -lcublas -lcublasLt -lcudart -lcurand
+                      cublasAlgoMap memory_utils cuda_utils logger)
+
