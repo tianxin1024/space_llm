@@ -236,6 +236,18 @@ inline int div_up(int a, int n) {
 
 cudaError_t getSetDevice(int i_device, int *o_device = NULL);
 
+inline int getDevice() {
+    int current_dev_id = 0;
+    check_cuda_error(cudaGetDevice(&current_dev_id));
+    return current_dev_id;
+}
+
+inline int getDeviceCount() {
+    int count = 0;
+    check_cuda_error(cudaGetDeviceCount(&count));
+    return count;
+}
+
 // clang-format off
 template<typename T> struct packed_type;
 template <>          struct packed_type<float>         { using type = float; }; // we don't need to pack float by default

@@ -19,3 +19,8 @@ add_library(memory_utils STATIC memory_utils.cu)
 set_property(TARGET memory_utils PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET memory_utils PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(memory_utils PUBLIC cuda_utils logger tensor)
+
+add_library(cublasAlgoMap STATIC cublasAlgoMap.cc)
+set_property(TARGET cublasAlgoMap PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET cublasAlgoMap PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(cublasAlgoMap PUBLIC -lcublas -lcudart -lcurand cuda_utils logger)
