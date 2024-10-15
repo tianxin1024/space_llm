@@ -1,6 +1,6 @@
 # space_llm
 
-## 自制大模型推理框架
+## 基于FasterTransformer, 自制大模型推理框架
 
 
 ## 编译方法
