@@ -98,6 +98,44 @@ template void cudaRandomUniform(bool *buffer, const size_t size);
 template void cudaRandomUniform(char *buffer, const size_t size);
 
 template <typename T>
+void cudaD2Hcpy(T *tgt, const T *src, const size_t size) {
+    check_cuda_error(cudaMemcpy(tgt, src, sizeof(T) * size, cudaMemcpyDeviceToHost));
+}
+
+template void cudaD2Hcpy(float *tgt, const float *src, size_t size);
+template void cudaD2Hcpy(half *tgt, const half *src, size_t size);
+#ifdef ENABLE_BF16
+template void cudaD2Hcpy(__nv_bfloat16 *tgt, const __nv_bfloat16 *src, size_t size);
+#endif
+template void cudaD2Hcpy(int *tgt, const int *src, size_t size);
+template void cudaD2Hcpy(bool *tgt, const bool *src, size_t size);
+#ifdef ENABLE_FP8
+template void cudaD2Hcpy(__nv_fp8_e4m3 *tgt, const __nv_fp8_e4m3 *src, size_t size);
+#endif
+template void cudaD2Hcpy(unsigned long long *tgt, const unsigned long long *src, size_t size);
+template void cudaD2Hcpy(unsigned int *tgt, const unsigned int *src, size_t size);
+template void cudaD2Hcpy(int8_t *tgt, const int8_t *src, size_t size);
+
+template <typename T>
+void cudaH2Dcpy(T *tgt, const T *src, const size_t size) {
+    check_cuda_error(cudaMemcpy(tgt, src, sizeof(T) * size, cudaMemcpyHostToDevice));
+}
+
+template void cudaH2Dcpy(float *tgt, const float *src, size_t size);
+template void cudaH2Dcpy(half *tgt, const half *src, size_t size);
+#ifdef ENABLE_BF16
+template void cudaH2Dcpy(__nv_bfloat16 *tgt, const __nv_bfloat16 *src, size_t size);
+#endif
+template void cudaH2Dcpy(int *tgt, const int *src, size_t size);
+template void cudaH2Dcpy(bool *tgt, const bool *src, size_t size);
+#ifdef ENABLE_FP8
+template void cudaH2Dcpy(__nv_fp8_e4m3 *tgt, const __nv_fp8_e4m3 *src, size_t size);
+#endif
+template void cudaH2Dcpy(unsigned long long *tgt, const unsigned long long *src, size_t size);
+template void cudaH2Dcpy(unsigned int *tgt, const unsigned int *src, size_t size);
+template void cudaH2Dcpy(int8_t *tgt, const int8_t *src, size_t size);
+
+template <typename T>
 void cudaD2Dcpy(T *tgt, const T *src, const size_t size) {
     check_cuda_error(cudaMemcpy(tgt, src, sizeof(T) * size, cudaMemcpyDeviceToDevice));
 }

@@ -15,7 +15,10 @@ add_executable(unittest
 target_link_libraries(unittest PUBLIC "${TORCH_LIBRARIES}" gtest_main)
 target_compile_features(unittest PRIVATE cxx_std_14)
 
-target_link_libraries(  # Libs for test_tensor and test_int8
+target_link_libraries(  # Libs for test_int8
+  unittest PUBLIC tensor memory_utils transpose_int8_kernels logger)
+
+target_link_libraries(  # Libs for test_tensor 
   unittest PUBLIC tensor cuda_utils logger)
 
 add_executable(test_activation test_activation.cu)
