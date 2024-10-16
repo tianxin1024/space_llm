@@ -44,7 +44,18 @@ DataType getTensorType() {
         return TYPE_FP32;
     } else if (std::is_same<T, half>::value || std::is_same<T, const half>::value) {
         return TYPE_FP16;
-    } else if (std::is_same<T, int>::value || std::is_same<T, const int>::value) {
+    }
+#ifdef ENABLE_BF16
+    else if (std::is_same<T, __nv_bfloat16>::value || std::is_same<T, const __nv_bfloat16>::value) {
+        return TYPE_BF16;
+    }
+#endif
+#ifdef ENABLE_FP8
+    else if (std::is_same<T, __nv_fp8_e4m3>::value || std::is_same<T, const __nv_fp8_e4m3>::value) {
+        return TYPE_FP8_E4M3;
+    }
+#endif
+    else if (std::is_same<T, int>::value || std::is_same<T, const int>::value) {
         return TYPE_INT32;
     } else if (std::is_same<T, int8_t>::value || std::is_same<T, const int8_t>::value) {
         return TYPE_INT8;

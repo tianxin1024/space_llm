@@ -334,6 +334,331 @@ void testGemmCorrectnessMatmul(size_t m, size_t n, size_t k) {
     check_cuda_error(cudaStreamDestroy(stream));
 }
 
+template <typename T, DataType computeType>
+void testGemmConsistencyMatmul(size_t m, size_t n, size_t k) {
+    // Test if Gemm is consistent with cublasWrapper
+    QK_LOG_INFO("Matmul function consistency test [m=%ld, n=%ld, k=%ld, %s]",
+                m, n, k, toString<T, computeType>().c_str());
+    Allocator allocator(getDevice());
+    cudaStream_t stream;
+    check_cuda_error(cudaStreamCreate(&stream));
+
+    DataType dtype = getTensorType<T>();
+    TensorWrapper a_tensor(&allocator, dtype, {m, k}, false);
+    TensorWrapper b_tensor(&allocator, dtype, {k, n}, false);
+    TensorWrapper c_tensor(&allocator, dtype, {m, n}, true);
+    TensorWrapper expected(&allocator, dtype, {m, n}, true);
+
+    cublasHandle_t cublas_handle;
+    cublasLtHandle_t cublaslt_handle;
+    check_cuda_error(cublasCreate(&cublas_handle));
+    check_cuda_error(cublasLtCreate(&cublaslt_handle));
+    check_cuda_error(cublasSetStream(cublas_handle, stream));
+    cublasAlgoMap cublas_algo_map(GEMM_CONFIG);
+    std::mutex *cublas_wrapper_mutex = new std::mutex();
+    cublasMMWrapper cublas_wrapper(cublas_handle,
+                                   cublaslt_handle,
+                                   stream,
+                                   &cublas_algo_map,
+                                   cublas_wrapper_mutex,
+                                   &allocator);
+
+    cudaDataType_t cuda_dtype = std::is_same<float, T>::value ? CUDA_R_32F : CUDA_R_16F;
+    cudaDataType_t cuda_ctype = (DataType::TYPE_FP32 == computeType) ? CUDA_R_32F : CUDA_R_16F;
+    cublas_wrapper.setGemmConfig(cuda_dtype, cuda_dtype, cuda_dtype, cuda_ctype);
+
+    std::shared_ptr<Gemm> gemm = createGemm(&allocator, stream, false, false);
+    gemm->setTypes(a_tensor.type, b_tensor.type, c_tensor.type, computeType);
+
+    for (auto &op_pair : op_pairs) {
+        std::string tc_name = getTestName(__func__, op_pair, m, n, k);
+
+        // Switch A/B because Gemm expects column major layout as cublas does.
+        size_t lda = (op_pair.transa == GEMM_OP_N) ? k : m;
+        size_t ldb = (op_pair.transb == GEMM_OP_N) ? n : k;
+        size_t ldc = n;
+        cublas_wrapper.Gemm(getCublasOperation(op_pair.transb),
+                            getCublasOperation(op_pair.transa),
+                            n, m, k,
+                            b_tensor.data, ldb,
+                            a_tensor.data, lda,
+                            expected.data, ldc);
+
+        c_tensor.setInvalidValues(); // to guarantee C has invalid data
+        gemm->gemm(op_pair.transa, op_pair.transb, m, n, k,
+                   a_tensor.data, a_tensor.type, lda,
+                   b_tensor.data, b_tensor.type, ldb,
+                   c_tensor.data, c_tensor.type, ldc);
+        EXPECT_ALMOST_EQUAL(tc_name + " api1", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->gemm(op_pair.transa, op_pair.transb, m, n, k,
+                   a_tensor.data, lda,
+                   b_tensor.data, ldb,
+                   c_tensor.data, ldc);
+        EXPECT_ALMOST_EQUAL(tc_name + " api2", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->gemm(op_pair.transa, op_pair.transb, m, n, k,
+                   a_tensor.data, b_tensor.data, c_tensor.data);
+        EXPECT_ALMOST_EQUAL(tc_name + " api3", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->gemm(op_pair.transa, op_pair.transb, m, n, k,
+                   a_tensor.data, DenseWeight<T>{(const T *)b_tensor.data, nullptr, nullptr}, c_tensor.data);
+        EXPECT_ALMOST_EQUAL(tc_name + " api4", T, computeType, c_tensor, expected);
+    }
+    delete cublas_wrapper_mutex;
+    check_cuda_error(cublasLtDestroy(cublaslt_handle));
+    check_cuda_error(cublasDestroy(cublas_handle));
+    check_cuda_error(cudaStreamDestroy(stream));
+}
+
+template <typename T, DataType computeType>
+void testGemmConsistencyBatchedMatmul(size_t m, size_t n, size_t k) {
+    // Test if Gemm is consistent with cublasWrapper
+    QK_LOG_INFO("Batched gemm function consistency test [m=%ld, n=%ld, k=%ld, %s]",
+                m, n, k, toString<T, computeType>().c_str());
+
+    Allocator allocator(getDevice());
+    cudaStream_t stream;
+    check_cuda_error(cudaStreamCreate(&stream));
+
+    // batch of in/out tensors
+    DataType a_type = getTensorType<T>();
+    DataType b_type = getTensorType<T>();
+    DataType c_type = getTensorType<T>();
+    std::vector<TensorWrapper *> a_tensors;
+    std::vector<TensorWrapper *> b_tensors;
+    std::vector<TensorWrapper *> c_tensors;
+    std::vector<TensorWrapper *> expecteds;
+    const size_t batch_size = 3;
+    for (size_t i = 0; i < batch_size; ++i) {
+        a_tensors.push_back(new TensorWrapper(&allocator, a_type, {m, k}, false));
+        b_tensors.push_back(new TensorWrapper(&allocator, b_type, {k, n}, false));
+        c_tensors.push_back(new TensorWrapper(&allocator, c_type, {m, n}, true));
+        expecteds.push_back(new TensorWrapper(&allocator, c_type, {m, n}, true));
+    }
+
+    const T *hA[]{(const T *)a_tensors[0]->data,
+                  (const T *)a_tensors[1]->data,
+                  (const T *)a_tensors[2]->data,
+                  nullptr, // for memory alignment.
+                  (const T *)b_tensors[0]->data,
+                  (const T *)b_tensors[1]->data,
+                  (const T *)b_tensors[2]->data,
+                  nullptr, // for memory alignment.
+                  (const T *)c_tensors[0]->data,
+                  (const T *)c_tensors[1]->data,
+                  (const T *)c_tensors[2]->data,
+                  nullptr, // for memory alignment.
+                  (const T *)expecteds[0]->data,
+                  (const T *)expecteds[1]->data,
+                  (const T *)expecteds[2]->data};
+
+    T **batch_tensor_ptrs = reinterpret_cast<T **>(allocator.malloc(sizeof(T *) * 16, false));
+    check_cuda_error(cudaMemcpyAsync(
+        (void *)batch_tensor_ptrs, hA, sizeof(T *) * 16, cudaMemcpyHostToDevice, stream));
+    const void *const *batch_a = reinterpret_cast<const void *const *>(batch_tensor_ptrs);
+    const void *const *batch_b = reinterpret_cast<const void *const *>(batch_tensor_ptrs + 4);
+    void *const *batch_c = reinterpret_cast<void *const *>(batch_tensor_ptrs + 8);
+    void *const *batch_expected = reinterpret_cast<void *const *>(batch_tensor_ptrs + 12);
+
+    cublasHandle_t cublas_handle;
+    cublasLtHandle_t cublaslt_handle;
+    check_cuda_error(cublasCreate(&cublas_handle));
+    check_cuda_error(cublasLtCreate(&cublaslt_handle));
+    check_cuda_error(cublasSetStream(cublas_handle, stream));
+    cublasAlgoMap cublas_algo_map(GEMM_CONFIG);
+    std::mutex *cublas_wrapper_mutex = new std::mutex();
+    cublasMMWrapper cublas_wrapper(cublas_handle,
+                                   cublaslt_handle,
+                                   stream,
+                                   &cublas_algo_map,
+                                   cublas_wrapper_mutex,
+                                   &allocator);
+
+    cudaDataType_t dtype = std::is_same<float, T>::value ? CUDA_R_32F : CUDA_R_16F;
+    cudaDataType_t ctype = (computeType == DataType::TYPE_FP32) ? CUDA_R_32F : CUDA_R_16F;
+    cublas_wrapper.setGemmConfig(dtype, dtype, dtype, ctype);
+
+    std::shared_ptr<Gemm> gemm = createGemm(&allocator, stream, false, false);
+    gemm->setTypes(a_type, b_type, c_type, computeType);
+
+    for (auto &op_pair : op_pairs) {
+        std::string tc_name = getTestName(__func__, op_pair, m, n, k);
+        QK_LOG_DEBUG(tc_name);
+
+        size_t lda = (op_pair.transa == GEMM_OP_N) ? k : m;
+        size_t ldb = (op_pair.transb == GEMM_OP_N) ? n : k;
+        size_t ldc = n;
+
+        // Switch A/B because Gemm expects column major layout as cublas does.
+        cublas_wrapper.batchedGemm(getCublasOperation(op_pair.transb), // N
+                                   getCublasOperation(op_pair.transa), // T
+                                   n,
+                                   m,
+                                   k,
+                                   (const void *const *)batch_b, ldb,
+                                   (const void *const *)batch_a, lda,
+                                   (void *const *)batch_expected, ldc,
+                                   batch_size);
+
+        gemm->batchedGemm(op_pair.transa, op_pair.transb, m, n, k,
+                          batch_a, a_type, lda,
+                          batch_b, b_type, ldb,
+                          batch_c, c_type, ldc,
+                          batch_size);
+        for (size_t i = 0; i < batch_size; ++i) {
+            EXPECT_ALMOST_EQUAL(tc_name + " api1 batch" + std::to_string(i),
+                                T, computeType, *c_tensors[i], *expecteds[i]);
+        }
+
+        for (size_t i = 0; i < batch_size; ++i) {
+            c_tensors[i]->setInvalidValues();
+        }
+        gemm->batchedGemm(op_pair.transa, op_pair.transb, m, n, k,
+                          batch_a, lda,
+                          batch_b, ldb,
+                          batch_c, ldc,
+                          batch_size);
+        for (size_t i = 0; i < batch_size; ++i) {
+            EXPECT_ALMOST_EQUAL(tc_name + " api2 batch" + std::to_string(i),
+                                T, computeType, *c_tensors[i], *expecteds[i]);
+        }
+
+        for (size_t i = 0; i < batch_size; ++i) {
+            c_tensors[i]->setInvalidValues();
+        }
+        gemm->batchedGemm(op_pair.transa, op_pair.transb, m, n, k,
+                          batch_a, batch_b, batch_c, batch_size);
+        for (size_t i = 0; i < batch_size; ++i) {
+            EXPECT_ALMOST_EQUAL(tc_name + " api3 batch" + std::to_string(i),
+                                T, computeType, *c_tensors[i], *expecteds[i]);
+        }
+    }
+    a_tensors.clear();
+    b_tensors.clear();
+    c_tensors.clear();
+    expecteds.clear();
+    delete cublas_wrapper_mutex;
+    check_cuda_error(cublasLtDestroy(cublaslt_handle));
+    check_cuda_error(cublasDestroy(cublas_handle));
+    check_cuda_error(cudaStreamDestroy(stream));
+}
+
+template <typename T, DataType computeType>
+void testGemmConsistencyStridedBatchedMatmul(size_t batch_size, size_t m, size_t n, size_t k) {
+    // Test if Gemm is consistent with cublasWrapper
+    QK_LOG_INFO("Strided batched gemm function consistency test [bsz=%ld, m=%ld, n=%ld, k=%ld, %s]",
+                batch_size, m, n, k, toString<T, computeType>().c_str());
+
+    Allocator allocator(getDevice());
+    cudaStream_t stream;
+    check_cuda_error(cudaStreamCreate(&stream));
+
+    DataType data_type = getTensorType<T>();
+    TensorWrapper a_tensor(&allocator, data_type, {batch_size, m, k}, false);
+    TensorWrapper b_tensor(&allocator, data_type, {batch_size, k, n}, false);
+    TensorWrapper c_tensor(&allocator, data_type, {batch_size, m, n}, true);
+    TensorWrapper expected(&allocator, data_type, {batch_size, m, n}, true);
+
+    cublasHandle_t cublas_handle;
+    cublasLtHandle_t cublaslt_handle;
+    check_cuda_error(cublasCreate(&cublas_handle));
+    check_cuda_error(cublasLtCreate(&cublaslt_handle));
+    check_cuda_error(cublasSetStream(cublas_handle, stream));
+    cublasAlgoMap cublas_algo_map(GEMM_CONFIG);
+    std::mutex *cublas_wrapper_mutex = new std::mutex();
+    cublasMMWrapper cublas_wrapper(cublas_handle,
+                                   cublaslt_handle,
+                                   stream,
+                                   &cublas_algo_map,
+                                   cublas_wrapper_mutex,
+                                   &allocator);
+
+    cudaDataType_t dtype = std::is_same<float, T>::value ? CUDA_R_32F : CUDA_R_16F;
+    cudaDataType_t ctype = (computeType == DataType::TYPE_FP32) ? CUDA_R_32F : CUDA_R_16F;
+    cublas_wrapper.setGemmConfig(dtype, dtype, dtype, ctype);
+
+    std::shared_ptr<Gemm> gemm = createGemm(&allocator, stream, false, false);
+    gemm->setTypes(a_tensor.type, b_tensor.type, c_tensor.type, computeType);
+
+    for (auto &op_pair : op_pairs) {
+        std::string tc_name = getTestName(__func__, op_pair, m, n, k);
+
+        // Switch A/B because Gemm expects column major layout as cublas does.
+        size_t lda = (op_pair.transa == GEMM_OP_N) ? k : m;
+        size_t ldb = (op_pair.transb == GEMM_OP_N) ? n : k;
+        size_t ldc = n;
+
+        int64_t stridea = m * k;
+        int64_t strideb = k * n;
+        int64_t stridec = m * n;
+
+        float alpha = 1.0f;
+        float beta = 0.0f;
+
+        cublas_wrapper.stridedBatchedGemm(getCublasOperation(op_pair.transb),
+                                          getCublasOperation(op_pair.transa),
+                                          n,
+                                          m,
+                                          k,
+                                          alpha,
+                                          b_tensor.data,
+                                          getCublasDataType(b_tensor.type),
+                                          ldb,
+                                          strideb,
+                                          a_tensor.data,
+                                          getCublasDataType(a_tensor.type),
+                                          lda,
+                                          stridea,
+                                          beta,
+                                          expected.data,
+                                          getCublasDataType(expected.type),
+                                          ldc,
+                                          stridec,
+                                          batch_size,
+                                          getCublasDataType(computeType));
+
+        c_tensor.setInvalidValues(); // to guarantee C has invalid data
+        gemm->stridedBatchedGemm(op_pair.transa, op_pair.transb, m, n, k,
+                                 a_tensor.data, a_tensor.type, lda, stridea,
+                                 b_tensor.data, b_tensor.type, ldb, strideb,
+                                 c_tensor.data, c_tensor.type, ldc, stridec,
+                                 batch_size, computeType, alpha, beta);
+        EXPECT_ALMOST_EQUAL(tc_name + " api1", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->stridedBatchedGemm(op_pair.transa, op_pair.transb, m, n, k,
+                                 a_tensor.data, lda, stridea,
+                                 b_tensor.data, ldb, strideb,
+                                 c_tensor.data, ldc, stridec,
+                                 batch_size, alpha, beta);
+        EXPECT_ALMOST_EQUAL(tc_name + " api2", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->stridedBatchedGemm(op_pair.transa, op_pair.transb, m, n, k,
+                                 a_tensor.data, stridea,
+                                 b_tensor.data, strideb,
+                                 c_tensor.data, stridec,
+                                 batch_size, alpha, beta);
+        EXPECT_ALMOST_EQUAL(tc_name + " api3", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->stridedBatchedGemm(op_pair.transa, op_pair.transb, m, n, k,
+                                 a_tensor.data,
+                                 b_tensor.data,
+                                 c_tensor.data,
+                                 batch_size, alpha, beta);
+        EXPECT_ALMOST_EQUAL(tc_name + " api4", T, computeType, c_tensor, expected);
+    }
+
+    delete cublas_wrapper_mutex;
+    check_cuda_error(cublasLtDestroy(cublaslt_handle));
+    check_cuda_error(cublasDestroy(cublas_handle));
+    check_cuda_error(cudaStreamDestroy(stream));
+}
 int main(int argc, char *argv[]) {
     // testGemmCreate();
     using testcase_t = std::tuple<size_t, size_t, size_t>;
@@ -353,6 +678,18 @@ int main(int argc, char *argv[]) {
         testGemmCorrectnessMatmul<float, TYPE_FP32>(m, n, k);
         testGemmCorrectnessMatmul<half, TYPE_FP32>(m, n, k);
         testGemmCorrectnessMatmul<half, TYPE_FP16>(m, n, k);
+
+        testGemmConsistencyMatmul<float, TYPE_FP32>(m, n, k);
+        testGemmConsistencyMatmul<half, TYPE_FP32>(m, n, k);
+        testGemmConsistencyMatmul<half, TYPE_FP16>(m, n, k);
+
+        testGemmConsistencyBatchedMatmul<float, TYPE_FP32>(m, n, k);
+        testGemmConsistencyBatchedMatmul<half, TYPE_FP32>(m, n, k);
+        testGemmConsistencyBatchedMatmul<half, TYPE_FP16>(m, n, k);
+
+        testGemmConsistencyStridedBatchedMatmul<float, TYPE_FP32>(7, m, n, k);
+        testGemmConsistencyStridedBatchedMatmul<half, TYPE_FP32>(7, m, n, k);
+        testGemmConsistencyStridedBatchedMatmul<half, TYPE_FP16>(7, m, n, k);
     }
 
     return 0;
