@@ -148,8 +148,8 @@ void computeReference(GemmOp transa, GemmOp transb,
     const void *_beta = (computeType == TYPE_FP16) ? (const void *)&h_beta : (const void *)&beta;
 
     check_cuda_error(cublasGemmEx(cublas_handle,
-                                  getCublasOperation(transa),
                                   getCublasOperation(transb),
+                                  getCublasOperation(transa),
                                   n, m, k,
                                   _alpha,
                                   (const void *)B.data, btype, ldb,
@@ -250,6 +250,10 @@ std::string toString() {
     str += ", compute_type=";
     str += (ctype == TYPE_FP32) ? "FP32" : "FP16";
     return str;
+}
+
+std::string toString(GemmOp op) {
+    return op == GEMM_OP_N ? "N" : "T";
 }
 
 struct GemmOpPair {
