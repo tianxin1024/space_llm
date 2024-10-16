@@ -313,7 +313,25 @@ void testGemmCorrectnessMatmul(size_t m, size_t n, size_t k) {
                    b_tensor.data, b_tensor.type, ldb,
                    c_tensor.data, c_tensor.type, ldc);
         EXPECT_ALMOST_EQUAL(tc_name + " api1", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->gemm(op_pair.transa, op_pair.transb, m, n, k,
+                   a_tensor.data, lda,
+                   b_tensor.data, ldb,
+                   c_tensor.data, ldc);
+        EXPECT_ALMOST_EQUAL(tc_name + " api2", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->gemm(op_pair.transa, op_pair.transb, m, n, k,
+                   a_tensor.data, b_tensor.data, c_tensor.data);
+        EXPECT_ALMOST_EQUAL(tc_name + " api3", T, computeType, c_tensor, expected);
+
+        c_tensor.setInvalidValues();
+        gemm->gemm(op_pair.transa, op_pair.transb, m, n, k,
+                   a_tensor.data, DenseWeight<T>{(const T *)b_tensor.data, nullptr, nullptr}, c_tensor.data);
+        EXPECT_ALMOST_EQUAL(tc_name + " api4", T, computeType, c_tensor, expected);
     }
+    check_cuda_error(cudaStreamDestroy(stream));
 }
 
 int main(int argc, char *argv[]) {
