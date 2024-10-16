@@ -27,6 +27,9 @@ run :
 debug :
 	@cd build/bin && gdb -x ./init.gdb
 
+test_gemm:
+	@cd build/bin && ./test_gemm
+
 unittest :
 	@cd build/bin && ./unittest
 
