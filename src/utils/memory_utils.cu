@@ -153,4 +153,25 @@ template void cudaD2Dcpy(__nv_fp8_e4m3 *tgt, const __nv_fp8_e4m3 *src, size_t si
 #endif
 template void cudaD2Dcpy(unsigned long long *tgt, const unsigned long long *src, size_t size);
 
+template <typename T>
+void cudaAutoCpy(T *tgt, const T *src, const size_t size, cudaStream_t stream) {
+    if (stream != NULL) {
+        check_cuda_error(cudaMemcpyAsync(tgt, src, sizeof(T) * size, cudaMemcpyDefault, stream));
+    } else {
+        check_cuda_error(cudaMemcpy(tgt, src, sizeof(T) * size, cudaMemcpyDefault));
+    }
+}
+
+template void cudaAutoCpy(float *tgt, const float *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(half *tgt, const half *src, size_t size, cudaStream_t stream);
+#ifdef ENABLE_BF16
+template void cudaAutoCpy(__nv_bfloat16 *tgt, const __nv_bfloat16 *src, size_t size, cudaStream_t stream);
+#endif
+template void cudaAutoCpy(int *tgt, const int *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(bool *tgt, const bool *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(int8_t *tgt, const int8_t *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(uint *tgt, const uint *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(unsigned long long *tgt, const unsigned long long *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(char *tgt, const char *src, size_t size, cudaStream_t stream);
+
 } // namespace space_llm

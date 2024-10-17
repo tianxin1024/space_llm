@@ -162,7 +162,7 @@ void computeReference(GemmOp transa, GemmOp transb,
     cudaDeviceSynchronize();
 }
 
-bool almostEqual(float a, float b, float atol = 1e-5, float rtol = 1e-8) {
+bool _almostEqual(float a, float b, float atol = 1e-5, float rtol = 1e-8) {
     // Params: a = value to compare and b = reference
     // This function follows implementation of numpy.isclose(), which checks
     //   abs(a - b) <= (atol + rtol * abs(b)).
@@ -196,7 +196,7 @@ bool _checkResult(std::string name, TensorWrapper &out, TensorWrapper &ref, floa
         float a = (float)h_out[i];
         float b = (float)h_ref[i];
 
-        bool ok = almostEqual(a, b, atol, rtol);
+        bool ok = _almostEqual(a, b, atol, rtol);
         // Print the error.
         if (!ok && failures < 4) {
             QK_LOG_ERROR(">> invalid result for i=%lu:", i);

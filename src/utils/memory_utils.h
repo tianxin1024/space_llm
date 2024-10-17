@@ -24,4 +24,7 @@ void cudaH2Dcpy(T *tgt, const T *src, const size_t size);
 template <typename T>
 void cudaD2Dcpy(T *tgt, const T *src, const size_t size);
 
+template <typename T>
+void cudaAutoCpy(T *tgt, const T *src, const size_t size, cudaStream_t stream);
+
 } // namespace space_llm

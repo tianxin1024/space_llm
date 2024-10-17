@@ -6,7 +6,7 @@
 #include "utils/memory_utils.h"
 #include "kernels/activation_kernels.h"
 
-#include "unittest_utils.h"
+#include "gtest_utils.h"
 
 using namespace space_llm;
 

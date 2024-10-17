@@ -9,11 +9,15 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(unittest 
     test_tensor.cu
-    test_int8.cu)
+    test_int8.cu
+    test_attention_kernels.cu)
 
 # automatic discovery of unit tests
 target_link_libraries(unittest PUBLIC "${TORCH_LIBRARIES}" gtest_main)
 target_compile_features(unittest PRIVATE cxx_std_14)
+
+target_link_libraries(  # Libs for test_attention_kernels
+  unittest PUBLIC -lcudart -lcurand gpt_kernels gtest tensor memory_utils unfused_attention_kernels logger)
 
 target_link_libraries(  # Libs for test_int8
   unittest PUBLIC tensor memory_utils transpose_int8_kernels logger)
