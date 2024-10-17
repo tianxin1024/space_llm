@@ -287,4 +287,48 @@ TYPED_TEST(AttentionKernelTest, MaskedSoftmax_NoPrompt) {
     this->runTestMaskedSoftmax({1, 12, 12, 1, 32, false, 0, false});
 }
 
+TYPED_TEST(AttentionKernelTest, MaskedSoftmax_NoPrompt2) {
+    // q_length is not multiple of 4.
+    this->runTestMaskedSoftmax({1, 11, 11, 4, 32, false, 0, false});
+}
+
+TYPED_TEST(AttentionKernelTest, MaskedSoftmax_HasPrompt) {
+    this->runTestMaskedSoftmax({1, 12, 24, 2, 32, false, 0, false});
+}
+
+TYPED_TEST(AttentionKernelTest, MaskedSoftmax_HasPrompt2) {
+    this->runTestMaskedSoftmax({1, 11, 24, 2, 32, false, 0, false});
+}
+
+TYPED_TEST(AttentionKernelTest, MaskedSoftmax_LongSequence1024) {
+    this->runTestMaskedSoftmax({1, 12, 1024, 2, 32, false, 0, false});
+}
+
+TYPED_TEST(AttentionKernelTest, MaskedSoftmax_LongSequence2048) {
+    this->runTestMaskedSoftmax({1, 12, 2048, 2, 32, false, 0, false});
+}
+
+TYPED_TEST(AttentionKernelTest, MaskedSoftmax_LongSequence3072) {
+    this->runTestMaskedSoftmax({1, 12, 3072, 2, 32, false, 0, false});
+}
+
+TYPED_TEST(AttentionKernelTest, MaskedSoftmax_LongSequence4096) {
+    this->runTestMaskedSoftmax({1, 12, 4096, 2, 32, false, 0, false});
+}
+
+// TYPED_TEST(AttentionKernelTest, Benchmark_MaskedSoftmax_LongSequence1024) {
+//     // Assume the bloom 176B model with 8 TP.
+//     this->runTestMaskedSoftmax({8, 1024, 1024, 14, 128, false, 0, false, true}, true);
+// }
+
+// TYPED_TEST(AttentionKernelTest, Benchmark_MaskedSoftmax_LongSequence2048) {
+//     // Assume the bloom 176B model with 8 TP.
+//     this->runTestMaskedSoftmax({8, 2048, 2048, 14, 128, false, 0, false, true}, true);
+// }
+
+// TYPED_TEST(AttentionKernelTest, Benchmark_MaskedSoftmax_LongSequence4096) {
+//     // Assume the bloom 176B model with 8 TP.
+//     this->runTestMaskedSoftmax({8, 4096, 4096, 14, 128, false, 0, false, true}, true);
+// }
+
 } // end of namespace
