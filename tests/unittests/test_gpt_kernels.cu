@@ -8,16 +8,24 @@
 using namespace space_llm;
 
 int test_find_context_dups();
+int test_compact();
 
 int main(int argc, char *argv[]) {
     bool all_passed = true;
     bool passed;
 
-    passed = test_find_context_dups() == EXIT_SUCCESS;
+    // passed = test_find_context_dups() == EXIT_SUCCESS;
+    // all_passed |= passed;
+    // printf("%s", passed ? "." : "X");
+    // if (!passed) {
+    //     puts("\ntest_find_context_dups: FAILED");
+    // }
+
+    passed = test_compact() == EXIT_SUCCESS;
     all_passed |= passed;
     printf("%s", passed ? "." : "X");
     if (!passed) {
-        puts("\ntest_find_context_dups: FAILED");
+        puts("\ntest_compact: FAILED");
     }
 
     puts("");
@@ -83,6 +91,98 @@ int test_find_context_dups() {
     EXPECT_TRUE(batch_idx_to_compact_idx == batch_idx_to_compact_idx_test);
     EXPECT_TRUE(compact_idx_to_batch_idx_test == compact_idx_to_batch_idx);
     EXPECT_TRUE(compact_size == 4);
+
+    return EXIT_SUCCESS;
+}
+
+int test_compact() {
+    size_t batch_size = 128;
+    size_t compact_size = 5;
+    size_t seq_len = 40;
+    size_t hidden_dimension = 8;
+
+    auto generator_f = std::bind(std::uniform_real_distribution<float>(-1.0, 1.0), std::mt19937());
+    auto generator_i = std::bind(std::uniform_int_distribution<int>(0, 128), std::mt19937());
+
+    // decoder_input [batch_size, seq_len, hidden_dimention] ->
+    // compact_decoder_input [compact_size, seq_len, hidden_dimension]
+    std::vector<float> decoder_input(batch_size * seq_len * hidden_dimension);
+    std::vector<float> compact_decoder_input(compact_size * seq_len * hidden_dimension);
+    std::generate(decoder_input.begin(), decoder_input.end(), generator_f);
+    float *d_decoder_input, *d_compact_decoder_input;
+    cudaMalloc(&d_decoder_input, decoder_input.size() * sizeof(float));
+    cudaMalloc(&d_compact_decoder_input, compact_decoder_input.size() * sizeof(float));
+    cudaH2Dcpy(d_decoder_input, decoder_input.data(), decoder_input.size());
+
+    // attention_mask [batch_size, seq_len, seq_len] ->
+    // compact_attention_mask [compact_size, seq_len, seq_len]
+    std::vector<float> attention_mask(batch_size * seq_len * seq_len);
+    std::vector<float> compact_attention_mask(compact_size * seq_len * seq_len);
+    std::generate(attention_mask.begin(), attention_mask.end(), generator_f);
+    float *d_attention_mask, *d_compact_attention_mask;
+    cudaMalloc(&d_attention_mask, attention_mask.size() * sizeof(float));
+    cudaMalloc(&d_compact_attention_mask, compact_decoder_input.size() * sizeof(float));
+    cudaH2Dcpy(d_attention_mask, attention_mask.data(), attention_mask.size());
+
+    // input_lengths [batch_size] -> compact_input_lengths [compact_size]
+    std::vector<int> input_lengths(batch_size);
+    std::vector<int> compact_input_lengths(compact_size);
+    std::generate(input_lengths.begin(), input_lengths.end(), generator_i);
+    int *d_input_lengths, *d_compact_input_lengths;
+    cudaMalloc(&d_input_lengths, input_lengths.size() * sizeof(int));
+    cudaMalloc(&d_compact_input_lengths, compact_input_lengths.size() * sizeof(int));
+    cudaH2Dcpy(d_input_lengths, input_lengths.data(), input_lengths.size());
+
+    // compact_idx [compact_size]
+    std::vector<int> compact_idx{0, 29, 42, 44, 100};
+    int *d_compact_idx;
+    cudaMalloc(&d_compact_idx, compact_idx.size() * sizeof(int));
+    cudaH2Dcpy(d_compact_idx, compact_idx.data(), compact_idx.size());
+
+    invokeCompactInputs<float>(d_compact_decoder_input,
+                               d_compact_attention_mask,
+                               d_compact_input_lengths,
+                               d_decoder_input,
+                               d_attention_mask,
+                               d_input_lengths,
+                               d_compact_idx,
+                               compact_size,
+                               seq_len,
+                               hidden_dimension);
+
+    cudaD2Hcpy(compact_decoder_input.data(), d_compact_decoder_input, compact_size * seq_len * hidden_dimension);
+    cudaD2Hcpy(compact_attention_mask.data(), d_compact_attention_mask, compact_size * seq_len * seq_len);
+    cudaD2Hcpy(compact_input_lengths.data(), d_compact_input_lengths, compact_size);
+
+    for (size_t i = 0; i < compact_size; ++i) {
+        for (size_t t = 0; t < seq_len; ++t) {
+            for (size_t h = 0; h < hidden_dimension; ++h) {
+                EXPECT_TRUE(compact_decoder_input[(i * seq_len + t) * hidden_dimension + h]
+                            == decoder_input[(compact_idx[i] * seq_len + t) * hidden_dimension + h]);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < compact_size; ++i) {
+        for (size_t t1 = 0; t1 < seq_len; ++t1) {
+            for (size_t t2 = 0; t2 < seq_len; ++t2) {
+                EXPECT_TRUE(compact_attention_mask[(i * seq_len + t1) * seq_len + t2]
+                            == attention_mask[(compact_idx[i] * seq_len + t1) * seq_len + t2]);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < compact_size; ++i) {
+        EXPECT_TRUE(compact_input_lengths[i] == input_lengths[compact_idx[i]]);
+    }
+
+    cudaFree(d_decoder_input);
+    cudaFree(d_compact_decoder_input);
+    cudaFree(d_attention_mask);
+    cudaFree(d_compact_attention_mask);
+    cudaFree(d_input_lengths);
+    cudaFree(d_compact_input_lengths);
+    cudaFree(d_compact_idx);
 
     return EXIT_SUCCESS;
 }
