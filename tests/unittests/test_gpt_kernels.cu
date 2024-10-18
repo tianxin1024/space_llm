@@ -121,7 +121,7 @@ int test_compact() {
     std::generate(attention_mask.begin(), attention_mask.end(), generator_f);
     float *d_attention_mask, *d_compact_attention_mask;
     cudaMalloc(&d_attention_mask, attention_mask.size() * sizeof(float));
-    cudaMalloc(&d_compact_attention_mask, compact_decoder_input.size() * sizeof(float));
+    cudaMalloc(&d_compact_attention_mask, compact_attention_mask.size() * sizeof(float));
     cudaH2Dcpy(d_attention_mask, attention_mask.data(), attention_mask.size());
 
     // input_lengths [batch_size] -> compact_input_lengths [compact_size]
@@ -150,9 +150,9 @@ int test_compact() {
                                seq_len,
                                hidden_dimension);
 
-    cudaD2Hcpy(compact_decoder_input.data(), d_compact_decoder_input, compact_size * seq_len * hidden_dimension);
-    cudaD2Hcpy(compact_attention_mask.data(), d_compact_attention_mask, compact_size * seq_len * seq_len);
-    cudaD2Hcpy(compact_input_lengths.data(), d_compact_input_lengths, compact_size);
+    cudaD2Hcpy(compact_decoder_input.data(), d_compact_decoder_input, compact_decoder_input.size());
+    cudaD2Hcpy(compact_attention_mask.data(), d_compact_attention_mask, compact_attention_mask.size());
+    cudaD2Hcpy(compact_input_lengths.data(), d_compact_input_lengths, compact_input_lengths.size());
 
     for (size_t i = 0; i < compact_size; ++i) {
         for (size_t t = 0; t < seq_len; ++t) {
