@@ -31,3 +31,6 @@ target_link_libraries(test_activation PUBLIC -lcublas -lcublasLt -lcudart
 
 add_executable(test_gemm test_gemm.cu)
 target_link_libraries(test_gemm PUBLIC -lcublas -lcudart -lcurand gemm cublasMMWrapper tensor cuda_utils logger)
+
+add_executable(test_gpt_kernels test_gpt_kernels.cu)
+target_link_libraries(test_gpt_kernels PUBLIC gpt_kernels memory_utils tensor cuda_utils logger)

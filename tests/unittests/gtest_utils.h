@@ -11,6 +11,38 @@
 
 namespace qk = space_llm;
 
+class TestFailureError : public std::exception {
+private:
+    std::string msg_;
+
+public:
+    explicit TestFailureError() = default;
+    explicit TestFailureError(std::string name, std::string msg = "") {
+        msg_ = qk::fmtstr("TEST FAIL [%s] %s", name.c_str(), msg.c_str());
+    }
+    const char *what() const throw() {
+        return msg_.c_str();
+    }
+};
+
+#define QK_EXPECT_TRUE(cond)                                   \
+    do {                                                       \
+        if (!(cond)) {                                         \
+            QK_LOG_ERROR("TEST FAIL [%s]: %s at %s:%d",        \
+                         __func__, #cond, __FILE__, __LINE__); \
+            throw TestFailureError(__func__);                  \
+        }                                                      \
+    } while (false)
+
+#define QK_EXPECT_FALSE(cond)                                  \
+    do {                                                       \
+        if (cond) {                                            \
+            QK_LOG_ERROR("TEST FAIL [%s]: %s at %s:%d",        \
+                         __func__, #cond, __FILE__, __LINE__); \
+            throw TestFailureError(__func__);                  \
+        }                                                      \
+    } while (false)
+
 namespace {
 
 #define EPSILON (1e-20)
