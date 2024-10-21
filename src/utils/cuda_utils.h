@@ -138,6 +138,9 @@ inline void syncAndCheck(const char *const file, int const line) {
         }                                                                                                            \
     }
 
+template <typename T>
+void print_abs_mean(const T *buf, uint size, cudaStream_t stream, std::string name = "");
+
 [[noreturn]] inline void throwRuntimeError(const char *const file, int const line, std::string const &info = "") {
     throw std::runtime_error(std::string("[QK][ERROR] ") + info + " Assertion fail: " + file + ":"
                              + std::to_string(line) + " \n");

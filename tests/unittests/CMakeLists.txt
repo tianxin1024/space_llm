@@ -34,3 +34,6 @@ target_link_libraries(test_gemm PUBLIC -lcublas -lcudart -lcurand gemm cublasMMW
 
 add_executable(test_gpt_kernels test_gpt_kernels.cu)
 target_link_libraries(test_gpt_kernels PUBLIC gpt_kernels memory_utils tensor cuda_utils logger)
+
+add_executable(test_layernorm test_layernorm.cu)
+target_link_libraries(test_layernorm PUBLIC -lcublasLt layernorm_kernels memory_utils cuda_utils logger)

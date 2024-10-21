@@ -5,7 +5,7 @@
 
 #include "utils/cuda_utils.h"
 
-namespace fastertransformer {
+namespace space_llm {
 
 template <typename T>
 struct LayerNormWeight {
@@ -43,4 +43,4 @@ void invokeGeneralLayerNorm(T *out,
         out, input, gamma, beta, layernorm_eps, m, n, scale, (float *)nullptr, int8_mode, stream, opt_version = 2);
 }
 
-} // namespace fastertransformer
+} // namespace space_llm

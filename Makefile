@@ -35,6 +35,9 @@ unittest :
 
 test_activation:
 	@cd build/bin && ./test_activation
+
+test_layernorm:
+	@cd build/bin && ./test_layernorm 1 512 1
 	
 demo_tensor:
 	@cd build/bin && ./demo_tensor 1 224 768 12 768 0
