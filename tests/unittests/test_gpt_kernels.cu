@@ -9,6 +9,7 @@ using namespace space_llm;
 
 // int test_find_context_dups();
 int test_compact();
+int test_uncompact();
 
 int main(int argc, char *argv[]) {
     bool all_passed = true;
@@ -26,6 +27,13 @@ int main(int argc, char *argv[]) {
     printf("%s", passed ? "." : "X");
     if (!passed) {
         puts("\ntest_compact: FAILED");
+    }
+
+    passed = test_uncompact() == EXIT_SUCCESS;
+    all_passed |= passed;
+    printf("%s", passed ? "." : "X");
+    if (!passed) {
+        puts("\ntest_uncompact: FAILED");
     }
 
     puts("");
@@ -183,6 +191,142 @@ int test_compact() {
     cudaFree(d_input_lengths);
     cudaFree(d_compact_input_lengths);
     cudaFree(d_compact_idx);
+
+    return EXIT_SUCCESS;
+}
+
+int test_uncompact() {
+    // compact_decoder_outputs [compact_size, seq_len, hidden_dimension] ->
+    // decoder_outputs [batch_size, seq_len, hidden_dimension]
+
+    size_t batch_size = 128;
+    size_t compact_size = 6;
+    size_t local_batch_size = compact_size / 2;
+    size_t seq_len = 40;
+    size_t max_seq_len = 60;
+    size_t hidden_dimension = 8;
+    size_t num_layer = 2;
+    size_t num_head = 2;
+    size_t size_per_head = 4;
+    auto generator_f = std::bind(std::uniform_real_distribution<float>(-1.0, 1.0), std::mt19937());
+    auto generator_i = std::bind(std::uniform_int_distribution<int>(0, compact_size - 1), std::mt19937());
+
+    std::vector<float> compact_decoder_outputs(compact_size * seq_len * hidden_dimension);
+    std::vector<float> decoder_outputs(batch_size * seq_len * hidden_dimension);
+    std::vector<float> k_cache_compact(num_layer * compact_size * num_head * size_per_head * seq_len);
+    std::vector<float> v_cache_compact(num_layer * compact_size * num_head * seq_len * size_per_head);
+    std::vector<float> k_cache_out(num_layer * batch_size * num_head * size_per_head * max_seq_len);
+    std::vector<float> v_cache_out(num_layer * batch_size * num_head * max_seq_len * size_per_head);
+
+    std::generate(compact_decoder_outputs.begin(), compact_decoder_outputs.end(), generator_f);
+    std::generate(k_cache_compact.begin(), k_cache_compact.end(), generator_f);
+    std::generate(v_cache_compact.begin(), v_cache_compact.end(), generator_f);
+
+    std::vector<int> batch_to_compact_idx(batch_size);
+    std::generate(batch_to_compact_idx.begin(), batch_to_compact_idx.end(), generator_i);
+
+    float *d_compact_decoder_outputs, *d_decoder_outputs, *d_k_cache, *d_v_cache;
+    float *d_k_cache_compact, *d_v_cache_compact;
+
+    cudaMalloc(&d_compact_decoder_outputs, compact_decoder_outputs.size() * sizeof(float));
+    cudaH2Dcpy(d_compact_decoder_outputs, compact_decoder_outputs.data(), compact_decoder_outputs.size());
+
+    cudaMalloc(&d_k_cache_compact, k_cache_compact.size() * sizeof(float));
+    cudaMalloc(&d_v_cache_compact, v_cache_compact.size() * sizeof(float));
+    cudaH2Dcpy(d_k_cache_compact, k_cache_compact.data(), k_cache_compact.size());
+    cudaH2Dcpy(d_v_cache_compact, v_cache_compact.data(), v_cache_compact.size());
+
+    cudaMalloc(&d_k_cache, k_cache_out.size() * sizeof(float));
+    cudaMalloc(&d_v_cache, v_cache_out.size() * sizeof(float));
+    cudaMemset(d_k_cache, 0, k_cache_out.size() * sizeof(float));
+    cudaMemset(d_v_cache, 0, v_cache_out.size() * sizeof(float));
+
+    cudaMalloc(&d_decoder_outputs, decoder_outputs.size() * sizeof(float));
+
+    int *d_batch_to_compact_idx;
+    cudaMalloc(&d_batch_to_compact_idx, batch_to_compact_idx.size() * sizeof(int));
+    cudaH2Dcpy(d_batch_to_compact_idx, batch_to_compact_idx.data(), batch_to_compact_idx.size());
+
+    const size_t cache_stride_dst = max_seq_len * hidden_dimension;
+    const size_t cache_stride_src = seq_len * hidden_dimension;
+
+    for (size_t ite = 0; ite < (batch_size / local_batch_size); ++ite) {
+        for (size_t l = 0; l < num_layer; ++l) {
+            const float *k_cache_offset = d_k_cache_compact + (l * compact_size + ite * local_batch_size) * cache_stride_src;
+            const float *v_cache_offset = d_v_cache_compact + (l * compact_size + ite * local_batch_size) * cache_stride_src;
+
+            invokeUnCompactCaches(d_k_cache + l * batch_size * cache_stride_dst,
+                                  d_v_cache + l * batch_size * cache_stride_dst,
+                                  k_cache_offset,
+                                  v_cache_offset,
+                                  d_batch_to_compact_idx,
+                                  batch_size,
+                                  num_head,
+                                  max_seq_len,
+                                  seq_len,
+                                  size_per_head,
+                                  local_batch_size,
+                                  ite);
+        }
+    }
+
+    invokeUnCompactOutputs(d_decoder_outputs,
+                           d_compact_decoder_outputs,
+                           d_batch_to_compact_idx,
+                           batch_size,
+                           cache_stride_src);
+
+    cudaD2Hcpy(decoder_outputs.data(), d_decoder_outputs, decoder_outputs.size());
+    cudaD2Hcpy(k_cache_out.data(), d_k_cache, k_cache_out.size());
+    cudaD2Hcpy(v_cache_out.data(), d_v_cache, v_cache_out.size());
+
+    for (size_t i = 0; i < batch_size; ++i) {
+        for (size_t t = 0; t < seq_len; ++t) {
+            for (size_t h = 0; h < hidden_dimension; ++h) {
+                EXPECT_TRUE(decoder_outputs[(i * seq_len + t) * hidden_dimension]
+                            == compact_decoder_outputs[(batch_to_compact_idx[i] * seq_len + t) * hidden_dimension]);
+            }
+        }
+    }
+
+    size_t x_size = (16 / sizeof(float));
+    for (size_t l = 0; l < num_layer; l++) {
+        for (size_t i = 0; i < batch_size; i++) {
+            for (size_t h = 0; h < num_head; h++) {
+                for (size_t dh = 0; dh < size_per_head / x_size; dh++) {
+                    for (size_t t = 0; t < seq_len; t++) {
+                        for (size_t x = 0; x < x_size; x++) {
+                            auto src = batch_to_compact_idx[i];
+                            EXPECT_TRUE(
+                                k_cache_out[((((l * batch_size + i) * num_head + h) * (size_per_head / x_size) + dh) * max_seq_len + t) * x_size + x] == k_cache_compact[((((l * compact_size + src) * num_head + h) * (size_per_head / x_size) + dh) * seq_len + t) * x_size + x]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (size_t l = 0; l < num_layer; l++) {
+        for (size_t i = 0; i < batch_size; i++) {
+            for (size_t h = 0; h < num_head; h++) {
+                for (size_t t = 0; t < seq_len; t++) {
+                    for (size_t dh = 0; dh < size_per_head; dh++) {
+                        auto src = batch_to_compact_idx[i];
+                        EXPECT_TRUE(
+                            v_cache_out[(((l * batch_size + i) * num_head + h) * max_seq_len + t) * size_per_head + dh] == v_cache_compact[(((l * compact_size + src) * num_head + h) * seq_len + t) * size_per_head + dh]);
+                    }
+                }
+            }
+        }
+    }
+
+    cudaFree(d_compact_decoder_outputs);
+    cudaFree(d_k_cache_compact);
+    cudaFree(d_v_cache_compact);
+    cudaFree(d_k_cache);
+    cudaFree(d_v_cache);
+    cudaFree(d_decoder_outputs);
+    cudaFree(d_batch_to_compact_idx);
 
     return EXIT_SUCCESS;
 }
