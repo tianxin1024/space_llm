@@ -283,8 +283,8 @@ int test_uncompact() {
     for (size_t i = 0; i < batch_size; ++i) {
         for (size_t t = 0; t < seq_len; ++t) {
             for (size_t h = 0; h < hidden_dimension; ++h) {
-                EXPECT_TRUE(decoder_outputs[(i * seq_len + t) * hidden_dimension]
-                            == compact_decoder_outputs[(batch_to_compact_idx[i] * seq_len + t) * hidden_dimension]);
+                QK_EXPECT_TRUE(decoder_outputs[(i * seq_len + t) * hidden_dimension]
+                               == compact_decoder_outputs[(batch_to_compact_idx[i] * seq_len + t) * hidden_dimension]);
             }
         }
     }
@@ -297,7 +297,7 @@ int test_uncompact() {
                     for (size_t t = 0; t < seq_len; t++) {
                         for (size_t x = 0; x < x_size; x++) {
                             auto src = batch_to_compact_idx[i];
-                            EXPECT_TRUE(
+                            QK_EXPECT_TRUE(
                                 k_cache_out[((((l * batch_size + i) * num_head + h) * (size_per_head / x_size) + dh) * max_seq_len + t) * x_size + x] == k_cache_compact[((((l * compact_size + src) * num_head + h) * (size_per_head / x_size) + dh) * seq_len + t) * x_size + x]);
                         }
                     }
@@ -312,7 +312,7 @@ int test_uncompact() {
                 for (size_t t = 0; t < seq_len; t++) {
                     for (size_t dh = 0; dh < size_per_head; dh++) {
                         auto src = batch_to_compact_idx[i];
-                        EXPECT_TRUE(
+                        QK_EXPECT_TRUE(
                             v_cache_out[(((l * batch_size + i) * num_head + h) * max_seq_len + t) * size_per_head + dh] == v_cache_compact[(((l * compact_size + src) * num_head + h) * seq_len + t) * size_per_head + dh]);
                     }
                 }
