@@ -41,8 +41,7 @@ struct DenseWeight {
     const float *output_h_scale_inv = nullptr;
 
     // TODO(bhsueh) check do we need this param
-    const float *per_channel_scale_min =
-        nullptr; // = min(weight_scale), used to adjust the scaling of per channel scaling
+    const float *per_channel_scale_min = nullptr; // = min(weight_scale), used to adjust the scaling of per channel scaling
 
     bool fuse_gemm_bias = false;
 };
