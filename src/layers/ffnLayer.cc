@@ -94,6 +94,8 @@ void ffnLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_tensors, c
         moe_k = input_tensors->at("moe_k").getVal<size_t>();
     }
     allocateBuffer(input_tensors->at("ffn_input").shape[0], moe_k, use_moe);
+
+    // TODO (tianxin)...
 }
 
 } // namespace space_llm
