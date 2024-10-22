@@ -33,7 +33,7 @@ void print_abs_mean(const T *buf, uint size, cudaStream_t stream, std::string na
         }
         max_val = max_val > abs(float(h_tmp[i])) ? max_val : abs(float(h_tmp[i]));
     }
-    printf("[INFO][QK] %20 size: %u, abs mean: %f, abs sum: %f, abs max: %f, find inf: %s",
+    printf("[INFO][QK] %20s size: %u, abs mean: %f, abs sum: %f, abs max: %f, find inf: %s",
            name.c_str(),
            size,
            sum / size,
@@ -45,6 +45,12 @@ void print_abs_mean(const T *buf, uint size, cudaStream_t stream, std::string na
     cudaDeviceSynchronize();
     check_cuda_error(cudaGetLastError());
 }
+
+template void print_abs_mean(const float *buf, uint size, cudaStream_t stream, std::string name);
+template void print_abs_mean(const half *buf, uint size, cudaStream_t stream, std::string name);
+template void print_abs_mean(const int *buf, uint size, cudaStream_t stream, std::string name);
+template void print_abs_mean(const uint *buf, uint size, cudaStream_t stream, std::string name);
+template void print_abs_mean(const int8_t *buf, uint size, cudaStream_t stream, std::string name);
 
 /* ***************************** common utils ****************************** */
 

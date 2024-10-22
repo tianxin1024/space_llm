@@ -16,7 +16,7 @@ DEBUG_FLAGS = $(FLAGS) -DCMAKE_BUILD_TYPE:STRING=Debug
 RELEASE_FLAGS = $(FLAGS) -DCMAKE_BUILD_TYPE:STRING=Release
 
 all : 
-	@$(COMPILE) && $(CMAKE_CMD) $(RELEASE_FLAGS) && make -s -j$(NUM_JOBS)
+	@$(COMPILE) && $(CMAKE_CMD) $(DEBUG_FLAGS) && make -s -j$(NUM_JOBS)
 
 build:
 	@$(CMAKE_MAKE) && make -s -j$(NUM_JOBS)
