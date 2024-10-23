@@ -95,7 +95,47 @@ void ffnLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_tensors, c
     }
     allocateBuffer(input_tensors->at("ffn_input").shape[0], moe_k, use_moe);
 
-    // TODO (tianxin)...
+    const int m = input_tensors->at("ffn_input").shape[0];
+    T *output_tensor = output_tensors->at("ffn_output").getPtr<T>();
+    const T *input_tensor = input_tensors->at("ffn_input").getPtr<const T>();
+
+    auto activation_type = getActivationType();
+
+    const int *ia3_tasks = input_tensors->getPtr<const int>("ia3_tasks", nullptr);
+
+    if (use_moe) {
+        QK_LOG_INFO("FFN moe");
+    }
+
+    QK_LOG_INFO("FFM gemm 1");
+    int m_tmp = input_tensors->at("ffn_input").shape[0];
+    if (m_tmp % 8 != 0) {
+        m_tmp = (m_tmp / 8 + 1) * 8;
+    }
+    const int m_padded = m_tmp;
+
+    // if (int8_mode_ == 1) {
+    //     QK_CHECK_WITH_INFO(weight_only_int8_fc_runner_.get() != NULL, "weight only runner was not initialized.");
+    // }
+    // TODO tianxin switch int8_mode_ == (1, 2, 0)
+    cublas_wrapper_->Gemm(CUBLAS_OP_N,
+                          CUBLAS_OP_N,
+                          hidden_units_,
+                          m,
+                          inter_size_,
+                          ffn_weights->output_weight.kernel,
+                          hidden_units_,
+                          inter_buf_,
+                          inter_size_,
+                          output_tensor,
+                          hidden_units_);
+
+    sync_check_cuda_error();
+
+    if (is_free_buffer_after_forward_ == true) {
+        freeBuffer();
+    }
+    sync_check_cuda_error();
 }
 
 } // namespace space_llm
