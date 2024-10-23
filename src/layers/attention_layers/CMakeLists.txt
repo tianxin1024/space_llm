@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.10)
+
+add_library(UnfusedAttentionLayer STATIC UnfusedAttentionLayer.cc)
+set_property(TARGET UnfusedAttentionLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET UnfusedAttentionLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(UnfusedAttentionLayer PUBLIC -lcublas -lcudart cublasMMWrapper memory_utils unfused_attention_kernels)
