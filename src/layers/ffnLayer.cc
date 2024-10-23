@@ -89,6 +89,7 @@ void ffnLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_tensors, c
     QK_CHECK(output_tensors->size() >= 1 || output_tensors->size() <= 4);
     bool use_moe = false;
     size_t moe_k = 0;
+    bool use_gated_activation = false;
     if (input_tensors->isExist("moe_k")) {
         use_moe = true;
         moe_k = input_tensors->at("moe_k").getVal<size_t>();
@@ -112,24 +113,65 @@ void ffnLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_tensors, c
     if (m_tmp % 8 != 0) {
         m_tmp = (m_tmp / 8 + 1) * 8;
     }
-    const int m_padded = m_tmp;
+    constexpr bool use_sparse_gemm = false;
+    int int8_mode_ = 0;
 
-    // if (int8_mode_ == 1) {
-    //     QK_CHECK_WITH_INFO(weight_only_int8_fc_runner_.get() != NULL, "weight only runner was not initialized.");
-    // }
-    // TODO tianxin switch int8_mode_ == (1, 2, 0)
-    cublas_wrapper_->Gemm(CUBLAS_OP_N,
-                          CUBLAS_OP_N,
-                          hidden_units_,
-                          m,
-                          inter_size_,
-                          ffn_weights->output_weight.kernel,
-                          hidden_units_,
-                          inter_buf_,
-                          inter_size_,
-                          output_tensor,
-                          hidden_units_);
+    if (use_sparse_gemm) {
+        QK_LOG_INFO("use sparse gemm");
+    } else {
+        if (int8_mode_ == 1) {
+            QK_LOG_INFO("int8 mode 1");
+        } else if (int8_mode_ == 2) {
+            QK_LOG_INFO("int8 mode 2");
+        } else {
+            cublas_wrapper_->Gemm(CUBLAS_OP_N,
+                                  CUBLAS_OP_N,
+                                  inter_size_,
+                                  m,
+                                  hidden_units_,
+                                  ffn_weights->intermediate_weight.kernel,
+                                  inter_size_,
+                                  input_tensor,
+                                  hidden_units_,
+                                  inter_buf_,
+                                  inter_size_);
+        }
+    }
 
+    if (int8_mode_ != 1 || ia3_tasks != nullptr || use_gated_activation) {
+        genericActivation(m,
+                          ffn_weights->intermediate_weight.bias,
+                          use_gated_activation ? ffn_weights->intermediate_weight2.bias : nullptr,
+                          input_tensors->at("ia3_tasks", {MEMORY_GPU, TYPE_INT32, {}, nullptr}).getPtr<const int>(),
+                          ffn_weights->ia3_weight.kernel,
+                          int8_mode_ == 2 ? ffn_weights->intermediate_weight.scale_out : (float *)nullptr,
+                          int8_mode_ == 2 ? ffn_weights->output_weight.scale : (float *)nullptr,
+                          input_tensors->getPtr<int>("padding_offset", nullptr),
+                          input_tensors->getVal<int>("seq_len", 1));
+    }
+    sync_check_cuda_error();
+
+    if (use_sparse_gemm) {
+        QK_LOG_INFO("FFM gemm 2: use sparse gemm");
+    } else {
+        if (int8_mode_ == 1) {
+            QK_LOG_INFO("int8 mode 1");
+        } else if (int8_mode_ == 2) {
+            QK_LOG_INFO("int8 mode 2");
+        } else {
+            cublas_wrapper_->Gemm(CUBLAS_OP_N,
+                                  CUBLAS_OP_N,
+                                  hidden_units_,
+                                  m,
+                                  inter_size_,
+                                  ffn_weights->output_weight.kernel,
+                                  hidden_units_,
+                                  inter_buf_,
+                                  inter_size_,
+                                  output_tensor,
+                                  hidden_units_);
+        }
+    }
     sync_check_cuda_error();
 
     if (is_free_buffer_after_forward_ == true) {
