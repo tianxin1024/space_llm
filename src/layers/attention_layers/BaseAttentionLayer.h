@@ -8,6 +8,13 @@
 
 namespace space_llm {
 
+enum class AttentionType {
+    UNFUSED_MHA,
+    UNFUSED_PADDED_MHA,
+    FUSED_MHA,
+    FUSED_PADDED_MHA
+};
+
 template <typename T>
 class BaseAttentionLayer : public BaseLayer {
 public:
