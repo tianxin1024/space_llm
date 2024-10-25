@@ -19,3 +19,8 @@ add_library(layernorm_kernels STATIC layernorm_kernels.cu)
 set_property(TARGET layernorm_kernels PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET layernorm_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 
+add_library(preprocess_kernels STATIC preprocess_kernels.cu)
+set_property(TARGET preprocess_kernels PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET preprocess_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+
+

@@ -1,6 +1,7 @@
 #include "models/vit/ViT.h"
 #include "layers/attention_layers/UnfusedAttentionLayer.h"
 #include "layers/ffnLayer.h"
+#include "kernels/preprocess_kernels.h"
 
 namespace space_llm {
 
@@ -180,6 +181,70 @@ template <typename T>
 void ViTTransformer<T>::setDefaultPaddingOffset(size_t batch_size) {
     invokeGetPaddingOffset(
         h_pinned_token_num_ptr_, &nopad_token_num_, padding_offset_, seq_len_vec_, batch_size, max_seq_len_, stream_);
+}
+
+template <typename T>
+void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
+                                const std::vector<Tensor> *input_tensors,
+                                const ViTWeight<T> *weights) {
+    // input_tensors:
+    //      input_img, BCHW [batch, chn_num, img_size, img_size]
+    // output tensors:
+    //      output feature_map [batch, seq_len, embed_dim]
+    const size_t input_batch_size = input_tensors->at(0).shape[0];
+    const size_t input_chn_num = input_tensors->at(0).shape[1];
+    const size_t input_img_size = input_tensors->at(0).shape[2];
+    const size_t patch_resol = input_img_size / patch_size_;
+    size_t seq_len = patch_resol * patch_resol + (with_cls_token_ ? 1 : 0);
+    const bool need_padding = (attention_type_ == AttentionType::UNFUSED_MHA && seq_len % 8 != 0 && std::is_same<half, T>::value);
+
+    QK_CHECK(input_img_size == img_size_);
+    QK_CHECK(seq_len == request_seq_len_);
+    QK_CHECK(input_tensors->size() == 1);
+    QK_CHECK(input_tensors->at(0).shape.size() == 4);
+    QK_CHECK(output_tensors->size() == 1);
+    QK_CHECK(output_tensors->at(0).shape.size() == 3);
+    allocateBuffer(input_batch_size);
+
+    const T *input = input_tensors->at(0).getPtr<const T>();
+    T *output = output_tensors->at(0).getPtr<T>();
+    T *encoder_input_ptr = embed_buf_1_;
+
+    // preprocess (patches embedding, concat class embed and add pos embed)
+    patchEmbed(need_padding ? embed_buf_2_ : encoder_input_ptr,
+               input,
+               weights->pre_encoder_conv_weights.kernel,
+               weights->pre_encoder_conv_weights.bias,
+               weights->pre_transform_embeds.class_embed,
+               weights->pre_transform_embeds.position_embed,
+               input_batch_size,
+               input_img_size,
+               patch_size_,
+               seq_len,
+               input_chn_num,
+               embed_dim_);
+
+    DataType data_type = getTensorType<T>();
+
+    size_t h_token_num = input_batch_size * seq_len;
+    // get offsets
+    Tensor *offset_tensor_ptr;
+    if (attention_type_ == AttentionType::FUSED_MHA) {
+        invokeGetTrtPaddingOffset(trt_mha_padding_offset_, seq_len_vec_, input_batch_size, stream_);
+        offset_tensor_ptr =
+            new Tensor(MEMORY_GPU, TYPE_INT32, std::vector<size_t>{input_batch_size + 1}, trt_mha_padding_offset_);
+    } else {
+        offset_tensor_ptr = new Tensor(MEMORY_GPU, TYPE_INT32, std::vector<size_t>{0}, nullptr);
+        if (need_padding) {
+            seq_len = (seq_len + 7) / 8 * 8;
+            h_token_num = seq_len * input_batch_size;
+            cudaMemsetAsync(encoder_input_ptr, 0, sizeof(T) * input_batch_size * seq_len * embed_dim_, stream_);
+            invokeRebuildPadding(
+                encoder_input_ptr, embed_buf_2_, padding_offset_, nopad_token_num_, head_num_ * head_dim_, stream_);
+        }
+    }
+
+    // TODO
 }
 
 } // namespace space_llm
