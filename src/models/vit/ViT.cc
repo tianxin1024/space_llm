@@ -247,4 +247,35 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
     // TODO
 }
 
+template <typename T>
+void ViTTransformer<T>::patchEmbed(T *output,
+                                   const T *input,
+                                   const T *kernel,
+                                   const T *bias,
+                                   const T *cls_embed,
+                                   const T *pos_embed,
+                                   const int batch,
+                                   const int img_size,
+                                   const int patch_size,
+                                   const int seq_len,
+                                   const int in_chans,
+                                   const int embed_dim) {
+    T *tmp_buf = with_cls_token_ ? (output == embed_buf_1_ ? embed_buf_2_ : embed_buf_1_) : output;
+
+    conv2d(
+        tmp_buf, input, kernel, batch, img_size, img_size, in_chans, embed_dim, patch_size, patch_size, cudnn_handle_);
+    int n = embed_dim;
+    int s = seq_len;
+    int m = batch * s;
+    if (with_cls_token_) {
+        QK_CHECK(cls_embed != nullptr);
+        invokeAddBiasConcatClsTokenAddPosEmbed(tmp_buf, output, bias, cls_embed, pos_embed, m, n, s, stream_);
+    } else {
+        invokeAddBiasPosEmbed(tmp_buf, bias, pos_embed, m, n, s * n, stream_);
+    }
+}
+
+template class ViTTransformer<half>;
+template class ViTTransformer<float>;
+
 } // namespace space_llm

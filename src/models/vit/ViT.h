@@ -42,6 +42,19 @@ private:
 
     void initialize();
 
+    void patchEmbed(T *output,
+                    const T *input,
+                    const T *kernel,
+                    const T *bias,
+                    const T *cls_embed,
+                    const T *pos_embed,
+                    const int batch,
+                    const int img_size,
+                    const int patch_size,
+                    const int seq_len,
+                    const int in_chans,
+                    const int embed_dim);
+
 protected:
     T *embed_buf_1_ = nullptr;
     T *embed_buf_2_ = nullptr;
