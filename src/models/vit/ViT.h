@@ -25,7 +25,7 @@ private:
     bool with_cls_token_;
     int sm_;
     static constexpr float layernorm_eps_ = 1e-6f;
-    float a_scaling_;
+    float q_scaling_;
     AttentionType attention_type_;
     // TODO add conv op
     cudnnHandle_t cudnn_handle_;
@@ -35,6 +35,12 @@ private:
 
     void allocateBuffer();
     void freeBuffer();
+
+    bool setSeqLenVec(size_t batch_size);
+    void setDefaultMask(size_t batch_size);
+    void setDefaultPaddingOffset(size_t batch_size);
+
+    void initialize();
 
 protected:
     T *embed_buf_1_ = nullptr;

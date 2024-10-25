@@ -81,4 +81,37 @@ public:
     virtual void forward(TensorMap *output_tensors, TensorMap *input_tensors, const ffnWeight<T> *ffn_weights);
 };
 
+template <typename T>
+class GeluffnLayer : public ffnLayer<T> {
+public:
+    GeluffnLayer(size_t max_batch_size,
+                 size_t max_seq_len,
+                 size_t head_num,
+                 size_t size_per_head,
+                 size_t expert_num,
+                 size_t inter_size,
+                 cudaStream_t stream,
+                 cublasMMWrapper *cublas_wrapper,
+                 IAllocator *allocator,
+                 bool is_free_buffer_after_forward,
+                 bool sparse = false,
+                 int int8_mode = 0,
+                 bool use_gated_activation = false);
+
+    GeluffnLayer(GeluffnLayer<T> const &ffn_layer);
+
+    virtual ~GeluffnLayer() = default;
+
+protected:
+    using ffnLayer<T>::stream_;
+    virtual ActivationType getActivationType() const override {
+        return ActivationType::Gelu;
+    }
+
+private:
+    using ffnLayer<T>::inter_buf_;
+    using ffnLayer<T>::inter_buf_2_;
+    using ffnLayer<T>::inter_size_;
+};
+
 } // namespace space_llm
