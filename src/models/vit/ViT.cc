@@ -2,6 +2,8 @@
 #include "layers/attention_layers/UnfusedAttentionLayer.h"
 #include "layers/ffnLayer.h"
 #include "kernels/preprocess_kernels.h"
+#include "kernels/vit_kernels.h"
+#include "utils/conv2d.h"
 
 namespace space_llm {
 
@@ -49,16 +51,16 @@ void ViTTransformer<T>::initialize() {
             QK_LOG_DEBUG("Request sequence length(%lu) is odd with unfused mha. Padding to %lu\n", request_seq_len_, max_seq_len_);
         }
 
-        attention_type_ = new UnfusedAttentionLayer<T>(max_batch_size_,
-                                                       max_seq_len_,
-                                                       head_num_,
-                                                       head_dim_,
-                                                       q_scaling_,
-                                                       stream_,
-                                                       cublas_wrapper_,
-                                                       allocator_,
-                                                       is_free_buffer_after_forward_,
-                                                       false);
+        attention_layer_ = new UnfusedAttentionLayer<T>(max_batch_size_,
+                                                        max_seq_len_,
+                                                        head_num_,
+                                                        head_dim_,
+                                                        q_scaling_,
+                                                        stream_,
+                                                        cublas_wrapper_,
+                                                        allocator_,
+                                                        is_free_buffer_after_forward_,
+                                                        false);
     } else {
         throw std::runtime_error(std::string("[QK][ERROR] Invalid attention type or sequence length\n"));
     }
@@ -174,7 +176,7 @@ bool ViTTransformer<T>::setSeqLenVec(size_t batch_size) {
 
 template <typename T>
 void ViTTransformer<T>::setDefaultMask(size_t batch_size) {
-    invokeBuildEncoderAttentionMask(mask_buf_, seq_len_vec_, batch_size, max_seq_len_, stream_);
+    // invokeBuildEncoderAttentionMask(mask_buf_, seq_len_vec_, batch_size, max_seq_len_, stream_);
 }
 
 template <typename T>
@@ -262,8 +264,7 @@ void ViTTransformer<T>::patchEmbed(T *output,
                                    const int embed_dim) {
     T *tmp_buf = with_cls_token_ ? (output == embed_buf_1_ ? embed_buf_2_ : embed_buf_1_) : output;
 
-    conv2d(
-        tmp_buf, input, kernel, batch, img_size, img_size, in_chans, embed_dim, patch_size, patch_size, cudnn_handle_);
+    conv2d(tmp_buf, input, kernel, batch, img_size, img_size, in_chans, embed_dim, patch_size, patch_size, cudnn_handle_);
     int n = embed_dim;
     int s = seq_len;
     int m = batch * s;
@@ -271,7 +272,7 @@ void ViTTransformer<T>::patchEmbed(T *output,
         QK_CHECK(cls_embed != nullptr);
         invokeAddBiasConcatClsTokenAddPosEmbed(tmp_buf, output, bias, cls_embed, pos_embed, m, n, s, stream_);
     } else {
-        invokeAddBiasPosEmbed(tmp_buf, bias, pos_embed, m, n, s * n, stream_);
+        invokeAddBiasAddPosEmbed(tmp_buf, bias, pos_embed, m, n, s * n, stream_);
     }
 }
 

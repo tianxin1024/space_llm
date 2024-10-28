@@ -24,6 +24,10 @@ inline void invokeGetPaddingOffset(size_t *h_pinned_token_num,
         h_pinned_token_num, h_token_num, tmp_mask_offset, nullptr, sequence_length, batch_size, max_seq_len, stream);
 }
 
+template <typename T>
+void invokeRebuildPadding(
+    T *dst, const T *src, const int *padding_offset, const int token_num, const int hidden_dim, cudaStream_t stream);
+
 void invokeGetTrtPaddingOffset(int *trt_mha_padding_offset,
                                const int *requence_length,
                                const int request_batch_size,

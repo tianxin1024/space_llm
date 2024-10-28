@@ -104,4 +104,24 @@ void invokeGetTrtPaddingOffset(int *trt_mha_padding_offset,
         trt_mha_padding_offset, sequence_length, request_batch_size, request_seq_len);
 }
 
+template <typename T>
+__global__ void rebuild_sequence_length_padding(const T *src, T *dst, const int *padding_offset, const int n) {
+    const int tid = threadIdx.x;
+    const int bid = blockIdx.x;
+    const int dst_seq_id = bid + padding_offset[bid];
+    const int src_seq_id = bid;
+
+    for (int i = tid; i < n; i += blockDim.x) {
+        dst[dst_seq_id * n + i] = src[src_seq_id * n + i];
+    }
+}
+
+template <typename T>
+void invokeRebuildPadding(
+    T *dst, const T *src, const int *padding_offset, const int token_num, const int hidden_dim, cudaStream_t stream) {
+    // src: [token_num, hidden_dim]
+    // dst: [batch_size * max_seq_len, hidden_dim]
+    rebuild_sequence_length_padding<<<token_num, 256, 0, stream>>>(src, dst, padding_offset, hidden_dim);
+}
+
 } // namespace space_llm

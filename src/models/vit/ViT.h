@@ -54,6 +54,7 @@ private:
                     const int seq_len,
                     const int in_chans,
                     const int embed_dim);
+    void allocateBuffer(size_t batch_size);
 
 protected:
     T *embed_buf_1_ = nullptr;
