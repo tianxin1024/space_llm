@@ -101,15 +101,19 @@ ViTTransformer<T>::ViTTransformer(size_t max_batch_size,
     img_size_(img_size),
     chn_num_(chn_num),
     patch_size_(patch_size),
+    request_seq_len_(img_size * img_size / patch_size / patch_size + (with_cls_token ? 1 : 0)),
+    max_seq_len_(0),
     embed_dim_(embed_dim),
     head_num_(head_num),
+    head_dim_(embed_dim / head_num),
     inter_size_(inter_size),
     num_layer_(num_layer),
-    with_cls_token_(with_cls_token_),
+    with_cls_token_(with_cls_token),
     sm_(sm),
     q_scaling_(q_scaling),
-    cudnn_handle_(cudnn_handle),
-    attention_type_(attention_type) {
+    attention_type_(attention_type),
+    attention_layer_(nullptr),
+    cudnn_handle_(cudnn_handle) {
     initialize();
 }
 
