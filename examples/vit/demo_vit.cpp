@@ -27,6 +27,8 @@ void vit_inference(int batch_size, int img_size, int patch_size, int embed_dim, 
     const int head_dim = embed_dim / head_num;
     const int seq_len = (img_size / patch_size) * (img_size / patch_size) + (with_cls_token ? 1 : 0);
 
+    ViTWeight<T> params = ViTWeight<T>(embed_dim, inter_size, layer_num, img_size, patch_size, in_chans, with_cls_token);
+
     AttentionType attention_type = AttentionType::UNFUSED_MHA;
     Allocator allocator(0);
 
@@ -63,6 +65,22 @@ void vit_inference(int batch_size, int img_size, int patch_size, int embed_dim, 
                                    getTensorType<T>(),
                                    std::vector<size_t>{(size_t)batch_size, (size_t)seq_len, (size_t)embed_dim},
                                    output_d}};
+
+    // warmup
+    for (int i = 0; i < 1; i++) {
+        // TODO add weights
+        vit->forward(&output_tensors, &input_tensors, &params);
+    }
+
+    // free data
+    check_cuda_error(cudaFree(output_d));
+    check_cuda_error(cudaFree(input_d));
+    check_cuda_error(cublasDestroy(cublas_handle));
+    check_cuda_error(cublasLtDestroy(cublaslt_handle));
+    checkCUDNN(cudnnDestroy(cudnn_handle));
+
+    cudaDeviceSynchronize();
+    check_cuda_error(cudaGetLastError());
 }
 
 int main() {

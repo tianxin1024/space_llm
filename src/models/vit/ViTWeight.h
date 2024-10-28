@@ -67,7 +67,7 @@ struct ViTWeight {
             }
 
             post_transformer_layernorm_weights.gamma = nullptr;
-            post_transformer_layernorm_weights.beat = nullptr;
+            post_transformer_layernorm_weights.beta = nullptr;
             pre_transform_embeds.class_embed = nullptr;
             pre_transform_embeds.position_embed = nullptr;
             pre_encoder_conv_weights.kernel = nullptr;

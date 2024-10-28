@@ -269,6 +269,8 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
     T *output = output_tensors->at(0).getPtr<T>();
     T *encoder_input_ptr = embed_buf_1_;
 
+    std::cout << "forward >>>>>>>>>>>>>>>>>>>>>>>>>>>> " << std::endl;
+
     // preprocess (patches embedding, concat class embed and add pos embed)
     patchEmbed(need_padding ? embed_buf_2_ : encoder_input_ptr,
                input,
