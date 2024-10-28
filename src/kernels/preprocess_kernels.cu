@@ -124,4 +124,12 @@ void invokeRebuildPadding(
     rebuild_sequence_length_padding<<<token_num, 256, 0, stream>>>(src, dst, padding_offset, hidden_dim);
 }
 
+template <typename T>
+void invokeRebuildPadding(
+    T *dst, const T *src, const int *padding_offset, const int token_num, const int hidden_dim, cudaStream_t stream);
+template void invokeRebuildPadding(
+    float *dst, const float *src, const int *padding_offset, const int token_num, const int hidden_dim, cudaStream_t stream);
+template void invokeRebuildPadding(
+    half *dst, const half *src, const int *padding_offset, const int token_num, const int hidden_dim, cudaStream_t stream);
+
 } // namespace space_llm

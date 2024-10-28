@@ -22,8 +22,10 @@ void vit_inference(int batch_size, int img_size, int patch_size, int embed_dim, 
 
     int max_batch = batch_size;
     const int in_chans = 3;
-    const int inter_size = embed_dim * 4;
     const bool with_cls_token = token_classifier > 0;
+    const int inter_size = embed_dim * 4;
+    const int head_dim = embed_dim / head_num;
+    const int seq_len = (img_size / patch_size) * (img_size / patch_size) + (with_cls_token ? 1 : 0);
 
     AttentionType attention_type = AttentionType::UNFUSED_MHA;
     Allocator allocator(0);
@@ -45,6 +47,22 @@ void vit_inference(int batch_size, int img_size, int patch_size, int embed_dim, 
                                                    &allocator,
                                                    false,
                                                    attention_type);
+
+    T *input_d, *output_d;
+    deviceMalloc(&input_d, batch_size * img_size * img_size * in_chans, false);
+    deviceMalloc(&output_d, batch_size * seq_len * embed_dim, false);
+
+    std::vector<Tensor> input_tensors = std::vector<Tensor>{
+        Tensor{MEMORY_GPU,
+               getTensorType<T>(),
+               std::vector<size_t>{(size_t)batch_size, (size_t)in_chans, (size_t)img_size, (size_t)img_size},
+               input_d}};
+
+    std::vector<Tensor> output_tensors =
+        std::vector<Tensor>{Tensor{MEMORY_GPU,
+                                   getTensorType<T>(),
+                                   std::vector<size_t>{(size_t)batch_size, (size_t)seq_len, (size_t)embed_dim},
+                                   output_d}};
 }
 
 int main() {

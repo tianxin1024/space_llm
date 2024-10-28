@@ -164,6 +164,59 @@ void ViTTransformer<T>::allocateBuffer() {
 }
 
 template <typename T>
+bool ViTTransformer<T>::resetBatch(size_t batch_size) {
+    if (max_batch_size_ < batch_size) {
+        max_batch_size_ = batch_size;
+    }
+
+    return true;
+}
+
+#define REMALLOC(var, size)                                             \
+    {                                                                   \
+        var = (decltype(var))allocator_->reMalloc(var, size, false);    \
+        QK_LOG_DEBUG("ReMalloc %s, ptr:%x, size:%lu", #var, var, size); \
+    }
+
+template <typename T>
+void ViTTransformer<T>::allocateBuffer(size_t batch_size) {
+    if (is_allocate_buffer_ && batch_size <= max_batch_size_) {
+        return;
+    }
+
+    batch_size = batch_size > max_batch_size_ ? batch_size : max_batch_size_;
+    REMALLOC(embed_buf_1_, sizeof(T) * batch_size * max_seq_len_ * embed_dim_);
+    REMALLOC(embed_buf_2_, sizeof(T) * batch_size * max_seq_len_ * embed_dim_);
+    REMALLOC(embed_buf_3_, sizeof(T) * batch_size * max_seq_len_ * embed_dim_);
+    REMALLOC(mask_buf_, sizeof(T) * batch_size * max_seq_len_ * max_seq_len_);
+    REMALLOC(padding_offset_, sizeof(int) * batch_size * max_seq_len_);
+    h_pinned_token_num_ptr_ = (size_t *)allocator_->reMalloc(h_pinned_token_num_ptr_, sizeof(size_t), true, true);
+    REMALLOC(trt_mha_padding_offset_, sizeof(int) * (2 * batch_size + 1));
+    REMALLOC(seq_len_vec_, sizeof(int) * batch_size);
+    resetBatch(batch_size);
+    setSeqLenVec(batch_size);
+    setDefaultPaddingOffset(batch_size);
+    setDefaultMask(batch_size);
+
+    is_allocate_buffer_ = true;
+}
+
+template <typename T>
+void ViTTransformer<T>::freeBuffer() {
+    if (is_allocate_buffer_) {
+        allocator_->free((void **)(&embed_buf_1_));
+        allocator_->free((void **)(&embed_buf_2_));
+        allocator_->free((void **)(&embed_buf_3_));
+        allocator_->free((void **)(&mask_buf_));
+        allocator_->free((void **)(&trt_mha_padding_offset_));
+        allocator_->free((void **)(&seq_len_vec_));
+        allocator_->free((void **)(&padding_offset_));
+        allocator_->free((void **)(&h_pinned_token_num_ptr_), true);
+        is_allocate_buffer_ = false;
+    }
+}
+
+template <typename T>
 bool ViTTransformer<T>::setSeqLenVec(size_t batch_size) {
     int *seq_len_vec = new int[batch_size];
     for (int i = 0; i < batch_size; ++i) {

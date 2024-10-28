@@ -5,6 +5,7 @@
 #include "utils/activation_types.h"
 #include "layers/BaseLayer.h"
 #include "layers/ffnWeight.h"
+#include "kernels/activation_kernels.h"
 
 namespace space_llm {
 
@@ -50,6 +51,16 @@ protected:
     virtual ActivationType getActivationType() const {
         return ActivationType::InvalidType;
     }
+
+    void genericActivation(int m,
+                           const T *bias1,
+                           const T *bias2,
+                           const int *ia3_tasks,
+                           const T *ia3_weights,
+                           const float *activation_in,
+                           const float *activation_out,
+                           const int *padding_offset,
+                           const int seq_len);
 
 public:
     ffnLayer(size_t max_batch_size,

@@ -61,6 +61,72 @@ ffnLayer<T>::~ffnLayer() {
 }
 
 template <typename T>
+void ffnLayer<T>::allocateBuffer() {
+    QK_CHECK_WITH_INFO(false,
+                       "ffnLayer::allocateBuffer() is deprecated. Use `allocateBuffer(size_t token_num, ...)` instead");
+}
+
+template <typename T>
+void ffnLayer<T>::allocateBuffer(size_t token_num, int moe_k, bool use_moe) {
+    // TODO tianxin ...
+    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
+    if (use_moe) {
+        // moe_gates_buf_ =
+        //     (T *)allocator_->reMalloc(moe_gates_buf_, sizeof(T) * pad_to_multiple_of_16(token_num * expert_num_), false);
+        // size_t ws_size_moe = 0;
+        // if (int8_mode_ == 0) {
+        //     FT_CHECK_WITH_INFO(moe_fc_runner_.get() != NULL, "moe runner was not initialized.");
+        //     ws_size_moe = moe_fc_runner_->getWorkspaceSize(token_num, hidden_units_, inter_size_, expert_num_, moe_k);
+        // } else if (int8_mode_ == 1) {
+        //     FT_CHECK_WITH_INFO(moe_int8_weight_only_fc_runner_.get() != NULL,
+        //                        "weight only moe runner was not initialized.");
+        //     ws_size_moe = moe_int8_weight_only_fc_runner_->getWorkspaceSize(
+        //         token_num, hidden_units_, inter_size_, expert_num_, moe_k);
+        // }
+
+        // moe_fc_workspace_ = (char *)allocator_->reMalloc(moe_fc_workspace_, sizeof(char) * ws_size_moe, false);
+    } else {
+        const auto type_size = int8_mode_ == 2 ? sizeof(int8_t) : sizeof(T);
+        inter_buf_ = (T *)allocator_->reMalloc(inter_buf_, type_size * token_num * max_inter_size_, false);
+        if (use_gated_activation_) {
+            inter_buf_2_ = (T *)allocator_->reMalloc(inter_buf_2_, sizeof(T) * token_num * max_inter_size_, false);
+        }
+
+        // if (int8_mode_ == 1) {
+        //     FT_CHECK_WITH_INFO(weight_only_int8_fc_runner_.get() != NULL, "weight only runner was not initialized.");
+        //     // We use max_size for n and k since we reuse buffers for both FCs and want to allocate the max
+        //     // possible memory that would be required by any of the individual gemms.
+        //     const int max_size = std::max(hidden_units_, inter_size_);
+        //     mixed_gemm_ws_bytes_ = weight_only_int8_fc_runner_->getWorkspaceSize(token_num, max_size, max_size);
+        //     mixed_gemm_workspace_ = (char *)allocator_->reMalloc(mixed_gemm_workspace_, mixed_gemm_ws_bytes_, false);
+        // } else if (int8_mode_ == 2) {
+        //     const int max_size = std::max(hidden_units_, inter_size_);
+        //     int8_gemm_ws_bytes_ = int8_fc_runner_->getWorkspaceSize(token_num, max_size, max_size);
+        //     int8_gemm_workspace_ = (char *)allocator_->reMalloc(int8_gemm_workspace_, int8_gemm_ws_bytes_, false);
+        // }
+    }
+
+    is_allocate_buffer_ = true;
+}
+
+template <typename T>
+void ffnLayer<T>::freeBuffer() {
+    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
+    if (is_allocate_buffer_) {
+        allocator_->free((void **)(&inter_buf_));
+        if (use_gated_activation_) {
+            allocator_->free((void **)(&inter_buf_2_));
+        }
+        if (mixed_gemm_workspace_) {
+            allocator_->free((void **)(&mixed_gemm_workspace_));
+            mixed_gemm_ws_bytes_ = 0;
+        }
+
+        is_allocate_buffer_ = false;
+    }
+}
+
+template <typename T>
 void ffnLayer<T>::forward(std::vector<Tensor> *output_tensors,
                           const std::vector<Tensor> *input_tensors,
                           const ffnWeight<T> *ffn_weights) {
@@ -179,5 +245,99 @@ void ffnLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_tensors, c
     }
     sync_check_cuda_error();
 }
+
+#define INVOKE_GENERIC_ACT(ACT)                  \
+    invokeGenericActivation<ACT>(inter_buf_,     \
+                                 bias1,          \
+                                 inter_buf_2_,   \
+                                 bias2,          \
+                                 ia3_tasks,      \
+                                 ia3_weights,    \
+                                 m,              \
+                                 inter_size_,    \
+                                 int8_mode_,     \
+                                 activation_in,  \
+                                 activation_out, \
+                                 padding_offset, \
+                                 seq_len,        \
+                                 stream_);
+
+template <typename T>
+void ffnLayer<T>::genericActivation(int m,
+                                    const T *bias1,
+                                    const T *bias2,
+                                    const int *ia3_tasks,
+                                    const T *ia3_weights,
+                                    const float *activation_in,
+                                    const float *activation_out,
+                                    const int *padding_offset,
+                                    const int seq_len) {
+    if (ia3_tasks != nullptr) {
+        QK_CHECK(seq_len > 0);
+    }
+
+    // dispatch according to actual activation
+    switch (getActivationType()) {
+    case ActivationType::Gelu:
+    case ActivationType::GeGLU:
+        // if (inter_buf_2_ == nullptr && int8_mode_ <= 1) {
+        //     invokeAddBiasGeluV2(
+        //         inter_buf_, bias1, ia3_tasks, ia3_weights, padding_offset, seq_len, m, inter_size_, stream_);
+        // } else {
+        INVOKE_GENERIC_ACT(GeluActivation);
+        // }
+        break;
+    case ActivationType::Relu:
+    case ActivationType::ReGLU:
+        INVOKE_GENERIC_ACT(ReluActivation);
+        break;
+    case ActivationType::Silu:
+        // INVOKE_GENERIC_ACT(SiluActivation);
+        break;
+    case ActivationType::Identity:
+        // INVOKE_GENERIC_ACT(IdentityActivation);
+        break;
+    }
+}
+
+template class ffnLayer<float>;
+template class ffnLayer<half>;
+
+template <typename T>
+GeluffnLayer<T>::GeluffnLayer(size_t max_batch_size,
+                              size_t max_seq_len,
+                              size_t head_num,
+                              size_t size_per_head,
+                              size_t expert_num,
+                              size_t inter_size,
+                              cudaStream_t stream,
+                              cublasMMWrapper *cublas_wrapper,
+                              IAllocator *allocator,
+                              bool is_free_buffer_after_forward,
+                              bool sparse,
+                              int int8_mode,
+                              bool use_gated_activation) :
+    ffnLayer<T>(max_batch_size,
+                max_seq_len,
+                head_num,
+                size_per_head,
+                expert_num,
+                inter_size,
+                stream,
+                cublas_wrapper,
+                allocator,
+                is_free_buffer_after_forward,
+                sparse,
+                int8_mode,
+                use_gated_activation) {
+}
+
+template <typename T>
+GeluffnLayer<T>::GeluffnLayer(GeluffnLayer<T> const &gelu_ffn_layer) :
+    ffnLayer<T>(gelu_ffn_layer) {
+}
+
+template class GeluffnLayer<float>;
+template class GeluffnLayer<half>;
 
 } // namespace space_llm

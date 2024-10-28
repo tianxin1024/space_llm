@@ -35,7 +35,7 @@ private:
 
     void allocateBuffer();
     void freeBuffer();
-
+    bool resetBatch(size_t batch_size);
     bool setSeqLenVec(size_t batch_size);
     void setDefaultMask(size_t batch_size);
     void setDefaultPaddingOffset(size_t batch_size);
