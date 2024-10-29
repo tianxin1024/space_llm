@@ -3,6 +3,7 @@
 #include "layers/ffnLayer.h"
 #include "kernels/preprocess_kernels.h"
 #include "kernels/vit_kernels.h"
+#include "kernels/layernorm_kernels.h"
 #include "utils/conv2d.h"
 
 namespace space_llm {
@@ -269,8 +270,6 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
     T *output = output_tensors->at(0).getPtr<T>();
     T *encoder_input_ptr = embed_buf_1_;
 
-    std::cout << "forward >>>>>>>>>>>>>>>>>>>>>>>>>>>> " << std::endl;
-
     // preprocess (patches embedding, concat class embed and add pos embed)
     patchEmbed(need_padding ? embed_buf_2_ : encoder_input_ptr,
                input,
@@ -305,7 +304,46 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
         }
     }
 
-    // TODO
+    T *from_buf = encoder_input_ptr;
+    T *norm_out_buf = embed_buf_2_;
+    T *attn_out_buf = embed_buf_3_;
+    T *encoder_out_buf = from_buf;
+
+    for (uint i = 0; i < num_layer_; ++i) {
+        std::cout << "forward  layernorm >>>>>>>>>>>>>>>>>>>>>>." << std::endl;
+        invokeGeneralLayerNorm(norm_out_buf,
+                               from_buf,
+                               weights->vit_layer_weights[i].attn_layernorm_weights.gamma,
+                               weights->vit_layer_weights[i].attn_layernorm_weights.beta,
+                               layernorm_eps_,
+                               h_token_num,
+                               embed_dim_,
+                               (float *)nullptr,
+                               0,
+                               stream_);
+
+        std::cout << "forward  attention >>>>>>>>>>>>>>>>>>>>>>." << std::endl;
+        // Attention
+        {
+            TensorMap attn_input_tensors{
+                {"input_query",
+                 Tensor{MEMORY_GPU, data_type, std::vector<size_t>{h_token_num, embed_dim_}, norm_out_buf}},
+                {"attention_mask",
+                 Tensor{MEMORY_GPU, data_type, std::vector<size_t>{input_batch_size, 1, seq_len, seq_len}, mask_buf_}}};
+            attn_input_tensors.insertIfValid("padding_offset", *offset_tensor_ptr);
+
+            TensorMap attn_output_tensors{
+                {"hidden_features",
+                 Tensor{MEMORY_GPU, data_type, std::vector<size_t>{h_token_num, embed_dim_}, attn_out_buf}}};
+
+            attention_layer_->forward(
+                &attn_output_tensors, &attn_input_tensors, &weights->vit_layer_weights[i].attention_weights);
+        }
+
+        std::cout << "forward ffn >>>>>>>>>>>>>>>>>>>>>>." << std::endl;
+
+        // FFN
+    }
 }
 
 template <typename T>

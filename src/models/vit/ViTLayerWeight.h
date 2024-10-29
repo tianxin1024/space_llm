@@ -65,6 +65,21 @@ struct ViTLayerWeight {
         }
     }
 
+    ViTLayerWeight(const ViTLayerWeight &other) :
+        embed_dim_(other.embed_dim_), inter_size_(other.inter_size_) {
+        memcpy(weights_size, other.weights_size, sizeof(size_t) * WEIGHT_N);
+        layer_idx_ = other.layer_idx_;
+        if (other.is_maintain_buffer) {
+            for (int i = 0; i < WEIGHT_N; ++i) {
+                if (!is_maintain_buffer) {
+                    deviceMalloc(&weights_ptr[i], weights_size[i]);
+                }
+                cudaD2Dcpy(weights_ptr[i], other.weights_ptr[i], weights_size[i]);
+            }
+            setWeightPtr();
+        }
+    }
+
     AttentionWeight<T> attention_weights;
     LayerNormWeight<T> attn_layernorm_weights;
     ffnWeight<T> ffn_weights;
