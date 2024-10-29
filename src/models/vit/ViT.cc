@@ -4,6 +4,7 @@
 #include "kernels/preprocess_kernels.h"
 #include "kernels/vit_kernels.h"
 #include "kernels/layernorm_kernels.h"
+#include "kernels/add_residual_kernels.h"
 #include "utils/conv2d.h"
 
 namespace space_llm {
@@ -366,6 +367,15 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
                   Tensor{MEMORY_GPU, data_type, std::vector<size_t>{h_token_num, embed_dim_}, attn_out_buf}}});
             ffn_layer_->forward(&ffn_output_tensors, &ffn_input_tensors, &weights->vit_layer_weights[i].ffn_weights);
         }
+
+        invokeAddBiasResidual(from_buf,
+                              attn_out_buf,
+                              weights->vit_layer_weights[i].ffn_weights.output_weight.bias,
+                              h_token_num,
+                              embed_dim_,
+                              stream_);
+
+        sync_check_cuda_error();
     }
 }
 

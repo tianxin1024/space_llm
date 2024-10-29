@@ -27,3 +27,6 @@ add_library(vit_kernels STATIC vit_kernels.cu)
 set_property(TARGET vit_kernels PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET vit_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 
+add_library(add_residual_kernels STATIC add_residual_kernels.cu)
+set_property(TARGET add_residual_kernels PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET add_residual_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
