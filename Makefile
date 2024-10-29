@@ -46,7 +46,7 @@ demo_vit:
 	@cd build/bin && ./demo_vit
 
 debug_vit:
-	@cd build/debug && gdb -x ./demo_vit.gdb
+	@cd debug && gdb -x ./demo_vit.gdb
 
 check-python:
 	@command -v python3 >/dev/null 2>&1 || { echo >&2 "Python is not installed.  Aborting."; exit 1; }

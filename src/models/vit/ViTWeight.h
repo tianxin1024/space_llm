@@ -76,6 +76,33 @@ struct ViTWeight {
         }
     }
 
+    ViTWeight(const ViTWeight &other) :
+        with_cls_token_(other.with_cls_token_),
+        embed_dim_(other.embed_dim_),
+        inter_size_(other.inter_size_),
+        num_layer_(other.num_layer_),
+        img_size_(other.img_size_),
+        patch_size_(other.patch_size_),
+        chn_num_(other.chn_num_),
+        seq_len_(other.seq_len_) {
+        memcpy(weights_size, other.weights_size, sizeof(size_t) * WEIGHT_N);
+        if (other.is_maintain_buffer) {
+            for (int i = 0; i < WEIGHT_N; i++) {
+                if (!is_maintain_buffer) {
+                    deviceMalloc(&weights_ptr[i], weights_size[i]);
+                }
+                cudaD2Dcpy(weights_ptr[i], other.weights_ptr[i], weights_size[i]);
+            }
+            setWeightPtr();
+        }
+
+        vit_layer_weights.clear();
+        vit_layer_weights.reserve(num_layer_);
+        for (int i = 0; i < num_layer_; i++) {
+            vit_layer_weights.push_back(other.vit_layer_weights[i]);
+        }
+    }
+
     std::vector<ViTLayerWeight<T>> vit_layer_weights;
     DenseWeight<T> pre_encoder_conv_weights;
     ViTEmbeds<T> pre_transform_embeds;

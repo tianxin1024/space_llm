@@ -357,6 +357,15 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
             stream_);
 
         // FFN
+        {
+            TensorMap ffn_input_tensors(
+                {{"ffn_input",
+                  Tensor{MEMORY_GPU, data_type, std::vector<size_t>{h_token_num, embed_dim_}, norm_out_buf}}});
+            TensorMap ffn_output_tensors(
+                {{"ffn_output",
+                  Tensor{MEMORY_GPU, data_type, std::vector<size_t>{h_token_num, embed_dim_}, attn_out_buf}}});
+            ffn_layer_->forward(&ffn_output_tensors, &ffn_input_tensors, &weights->vit_layer_weights[i].ffn_weights);
+        }
     }
 }
 

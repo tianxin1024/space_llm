@@ -20,6 +20,12 @@ void vit_inference(int batch_size, int img_size, int patch_size, int embed_dim, 
     std::mutex *cublas_wrapper_mutex = new std::mutex();
     cublasMMWrapper *cublas_wrapper = new cublasMMWrapper(cublas_handle, cublaslt_handle, stream, cublas_algo_map, cublas_wrapper_mutex, nullptr);
 
+    if (std::is_same<T, half>::value) {
+        cublas_wrapper->setFP16GemmConfig();
+    } else if (std::is_same<T, float>::value) {
+        cublas_wrapper->setFP32GemmConfig();
+    }
+
     int max_batch = batch_size;
     const int in_chans = 3;
     const bool with_cls_token = token_classifier > 0;
