@@ -7,6 +7,12 @@
 #include "kernels/add_residual_kernels.h"
 #include "utils/conv2d.h"
 
+#define SAFE_FREE(x) \
+    if (x) {         \
+        delete x;    \
+        x = nullptr; \
+    }
+
 namespace space_llm {
 
 template <typename T>
@@ -377,6 +383,29 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
 
         sync_check_cuda_error();
     }
+
+    invokeGeneralLayerNorm(need_padding ? norm_out_buf : output,
+                           from_buf,
+                           weights->post_transformer_layernorm_weights.gamma,
+                           weights->post_transformer_layernorm_weights.beta,
+                           layernorm_eps_,
+                           h_token_num,
+                           embed_dim_,
+                           (float *)nullptr,
+                           0,
+                           stream_);
+
+    if (need_padding) {
+        // invokeRemovePadding(output, norm_out_buf, padding_offset_, nopad_token_num_, head_num_ * head_dim_, stream_);
+    }
+
+    if (is_free_buffer_after_forward_ == true) {
+        freeBuffer();
+    }
+
+    sync_check_cuda_error();
+
+    SAFE_FREE(offset_tensor_ptr);
 }
 
 template <typename T>
