@@ -310,7 +310,6 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
     T *encoder_out_buf = from_buf;
 
     for (uint i = 0; i < num_layer_; ++i) {
-        std::cout << "forward  layernorm >>>>>>>>>>>>>>>>>>>>>>." << std::endl;
         invokeGeneralLayerNorm(norm_out_buf,
                                from_buf,
                                weights->vit_layer_weights[i].attn_layernorm_weights.gamma,
@@ -322,7 +321,6 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
                                0,
                                stream_);
 
-        std::cout << "forward  attention >>>>>>>>>>>>>>>>>>>>>>." << std::endl;
         // Attention
         {
             TensorMap attn_input_tensors{
@@ -340,7 +338,23 @@ void ViTTransformer<T>::forward(std::vector<Tensor> *output_tensors,
                 &attn_output_tensors, &attn_input_tensors, &weights->vit_layer_weights[i].attention_weights);
         }
 
-        std::cout << "forward ffn >>>>>>>>>>>>>>>>>>>>>>." << std::endl;
+        invokeGeneralAddBiasResidualPreLayerNorm(
+            from_buf,
+            norm_out_buf,
+            from_buf,
+            attn_out_buf,
+            weights->vit_layer_weights[i].ffn_layernorm_weights.gamma,
+            weights->vit_layer_weights[i].ffn_layernorm_weights.beta,
+            weights->vit_layer_weights[i].attention_weights.attention_output_weight.bias,
+            layernorm_eps_,
+            h_token_num,
+            embed_dim_,
+            (float *)nullptr,
+            (float *)nullptr,
+            (float *)nullptr,
+            (float *)nullptr,
+            0,
+            stream_);
 
         // FFN
     }
