@@ -24,9 +24,9 @@ struct ViTLayerWeight {
         weights_size[7] = embed_dim_;
         weights_size[8] = embed_dim_;
         weights_size[9] = embed_dim_;
-        weights_size[10] = embed_dim_ * embed_dim_;
-        weights_size[11] = embed_dim_;
-        weights_size[12] = embed_dim_ * embed_dim_;
+        weights_size[10] = embed_dim_ * inter_size_;
+        weights_size[11] = inter_size_;
+        weights_size[12] = inter_size_ * embed_dim_;
         weights_size[13] = embed_dim_;
         weights_size[14] = embed_dim_;
         weights_size[15] = embed_dim_;
