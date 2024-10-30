@@ -73,10 +73,37 @@ void vit_inference(int batch_size, int img_size, int patch_size, int embed_dim, 
                                    output_d}};
 
     // warmup
-    for (int i = 0; i < 1; i++) {
-        // TODO add weights
+    for (int i = 0; i < 10; i++) {
         vit->forward(&output_tensors, &input_tensors, &params);
     }
+
+    int ite = 100;
+    CudaTimer cuda_timer(stream);
+    cuda_timer.start();
+    for (int i = 0; i < ite; i++) {
+        vit->forward(&output_tensors, &input_tensors, &params);
+    }
+    float total_time = cuda_timer.stop();
+
+    QK_LOG_INFO("batch_size: %d, img_size : %d,\n"
+                "patch_size: %d, embed_dim: %d,\n"
+                "head_num  : %d, head_dim : %d,\n"
+                "layer_num : %d, is_fp16  : %d,\n"
+                "QK-CPP-time %.2f ms (%d iterations) ",
+                batch_size,
+                img_size,
+                patch_size,
+                embed_dim,
+                head_num,
+                head_dim,
+                layer_num,
+                std::is_same<T, half>::value,
+                total_time / ite,
+                ite);
+
+    delete vit;
+    delete cublas_algo_map;
+    delete cublas_wrapper_mutex;
 
     // free data
     check_cuda_error(cudaFree(output_d));
