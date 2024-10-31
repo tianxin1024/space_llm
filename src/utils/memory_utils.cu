@@ -174,4 +174,120 @@ template void cudaAutoCpy(uint *tgt, const uint *src, size_t size, cudaStream_t 
 template void cudaAutoCpy(unsigned long long *tgt, const unsigned long long *src, size_t size, cudaStream_t stream);
 template void cudaAutoCpy(char *tgt, const char *src, size_t size, cudaStream_t stream);
 
+// loads data from binary file. If it succeeds, returns a non-empty vector. If loading fails or
+// the product of the elements in shape is 0, this function will return an empty vector.
+template <typename T>
+std::vector<T> loadWeightFromBinHelper(std::vector<size_t> shape, std::string filename) {
+    if (shape.size() > 2) {
+        printf("[ERROR] shape should have less than two dims \n");
+        return std::vector<T>();
+    }
+
+    size_t dim0 = shape[0], dim1 = 1;
+    if (shape.size() == 2) {
+        dim1 = shape[1];
+    }
+    size_t size = dim0 * dim1;
+    if (size == 0) {
+        QK_LOG_WARNING("shape is zero, skip loading weight from file %s \n", filename.c_str());
+        return std::vector<T>();
+    }
+
+    std::vector<T> host_array(size);
+    std::ifstream in(filename, std::ios::in | std::ios::binary);
+    if (!in.is_open()) {
+        QK_LOG_WARNING("file %s cannot be opened, loading model fails! \n", filename.c_str());
+        return std::vector<T>();
+    }
+
+    size_t loaded_data_size = sizeof(T) * size;
+    in.seekg(0, in.end);
+    in.seekg(0, in.beg);
+
+    QK_LOG_DEBUG("Read " + std::to_string(loaded_data_size) + " bytes from " + filename);
+    in.read((char *)host_array.data(), loaded_data_size);
+
+    size_t in_get_size = in.gcount();
+    if (in_get_size != loaded_data_size) {
+        QK_LOG_WARNING("file %s only has %ld, but request %ld, loading model fails! \n",
+                       filename.c_str(),
+                       in_get_size,
+                       loaded_data_size);
+        return std::vector<T>();
+    }
+    in.close();
+    // If we succeed, return an array with values.
+    return host_array;
+}
+
+template <typename T, typename T_IN>
+int loadWeightFromBinFunc(T *ptr, std::vector<size_t> shape, std::string filename) {
+    std::vector<T_IN> host_array = loadWeightFromBinHelper<T_IN>(shape, filename);
+
+    if (host_array.empty()) {
+        return 0;
+    }
+
+    if (std::is_same<T, T_IN>::value == true) {
+        cudaH2Dcpy(ptr, (T *)host_array.data(), host_array.size());
+    } else {
+        T_IN *ptr_2 = nullptr;
+        deviceMalloc(&ptr_2, host_array.size(), false);
+        cudaH2Dcpy(ptr_2, host_array.data(), host_array.size());
+        invokeCudaD2DcpyConvert(ptr, ptr_2, host_array.size());
+        deviceFree(ptr_2);
+    }
+    return 0;
+}
+
+template <typename T>
+int loadWeightFromBin(T *ptr, std::vector<size_t> shape, std::string filename, QKCudaDataType model_file_type) {
+    switch (model_file_type) {
+    case QKCudaDataType::FP32:
+        loadWeightFromBinFunc<T, float>(ptr, shape, filename);
+        break;
+
+    case QKCudaDataType::FP16:
+        loadWeightFromBinFunc<T, half>(ptr, shape, filename);
+        break;
+    case QKCudaDataType::INT8:
+        loadWeightFromBinFunc<T, int8_t>(ptr, shape, filename);
+        break;
+    default:
+        QK_LOG_ERROR("Does not support QKCudaDataType=%d", model_file_type);
+        QK_CHECK(false);
+    }
+    return 0;
+}
+
+template <>
+int loadWeightFromBin(int *ptr, std::vector<size_t> shape, std::string filename, QKCudaDataType model_file_type) {
+    loadWeightFromBinFunc<int, int>(ptr, shape, filename);
+    return 0;
+}
+
+template <typename T_IN, typename T_OUT>
+__global__ void cudaD2DcpyConvert(T_OUT *dst, const T_IN *src, const size_t size) {
+    for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
+        dst[tid] = cuda_cast<T_OUT>(src[tid]);
+    }
+}
+
+template <typename T_IN, typename T_OUT>
+void invokeCudaD2DcpyConvert(T_OUT *tgt, const T_IN *src, const size_t size, cudaStream_t stream) {
+    cudaD2DcpyConvert<<<256, 256, 0, stream>>>(tgt, src, size);
+}
+
+template void invokeCudaD2DcpyConvert(int8_t *tgt, const float *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(float *tgt, const int8_t *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(float *tgt, const int *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(half *tgt, const int *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(float *tgt, const float *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(half *tgt, const float *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(float *tgt, const half *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(uint *tgt, const int *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(int *tgt, const uint *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(int *tgt, const float *src, const size_t size, cudaStream_t stream);
+template void invokeCudaD2DcpyConvert(int *tgt, const half *src, const size_t size, cudaStream_t stream);
+
 } // namespace space_llm

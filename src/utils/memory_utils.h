@@ -3,6 +3,7 @@
 #include "utils/cuda_utils.h"
 #include "utils/tensor.h"
 #include "utils/cuda_utils.h"
+#include "utils/cuda_type_utils.cuh"
 
 namespace space_llm {
 
@@ -26,5 +27,14 @@ void cudaD2Dcpy(T *tgt, const T *src, const size_t size);
 
 template <typename T>
 void cudaAutoCpy(T *tgt, const T *src, const size_t size, cudaStream_t stream);
+
+template <typename T>
+int loadWeightFromBin(T *ptr,
+                      std::vector<size_t> shape,
+                      std::string filename,
+                      QKCudaDataType model_file_type = QKCudaDataType::FP32);
+
+template <typename T_IN, typename T_OUT>
+void invokeCudaD2DcpyConvert(T_OUT *tgt, const T_IN *src, const size_t size, cudaStream_t stream = 0);
 
 } // namespace space_llm
