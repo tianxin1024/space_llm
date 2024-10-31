@@ -19,7 +19,7 @@ int main(int argc, char *argv[]) {
 
     int max_m = atoi(argv[1]);
     int max_n = atoi(argv[2]);
-    const FtCudaDataType data_type = static_cast<FtCudaDataType>(atoi(argv[3])); // 0 FP32, 1 FP16, 2 BF16
+    const QKCudaDataType data_type = static_cast<QKCudaDataType>(atoi(argv[3])); // 0 FP32, 1 FP16, 2 BF16
 
     for (int m = 1; m <= max_m; m *= 2) {
         for (int n = 128; n <= max_n; n *= 2) {

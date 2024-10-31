@@ -1,4 +1,5 @@
 #include "utils/cuda_utils.h"
+#include "utils/INIReader.h"
 
 namespace space_llm {
 
@@ -81,5 +82,28 @@ cudaError_t getSetDevice(int i_device, int *o_device) {
 
     return cudaSuccess;
 }
+
+QKCudaDataType getModelFileType(std::string ini_file, std::string section_name) {
+    QKCudaDataType model_file_type;
+    INIReader reader = INIReader(ini_file);
+    if (reader.ParseError() < 0) {
+        QK_LOG_WARNING("Can't load %s. Use FP32 as default", ini_file.c_str());
+        model_file_type = QKCudaDataType::FP32;
+    } else {
+        std::string weight_data_type_str = std::string(reader.Get(section_name, "weight_data_type"));
+        if (weight_data_type_str.find("fp32") != std::string::npos) {
+            model_file_type = QKCudaDataType::FP32;
+        } else if (weight_data_type_str.find("fp16") != std::string::npos) {
+            model_file_type = QKCudaDataType::FP16;
+        } else if (weight_data_type_str.find("bf16") != std::string::npos) {
+            model_file_type = QKCudaDataType::BF16;
+        } else {
+            QK_LOG_WARNING("Invalid type %s. Use FP32 as default", weight_data_type_str.c_str());
+            model_file_type = QKCudaDataType::FP32;
+        }
+    }
+    return model_file_type;
+}
+/* ************************** end of common utils ************************** */
 
 } // namespace space_llm

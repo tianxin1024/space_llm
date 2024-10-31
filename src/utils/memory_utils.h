@@ -3,7 +3,6 @@
 #include "utils/cuda_utils.h"
 #include "utils/tensor.h"
 #include "utils/cuda_utils.h"
-#include "utils/cuda_type_utils.cuh"
 
 namespace space_llm {
 
@@ -36,5 +35,14 @@ int loadWeightFromBin(T *ptr,
 
 template <typename T_IN, typename T_OUT>
 void invokeCudaD2DcpyConvert(T_OUT *tgt, const T_IN *src, const size_t size, cudaStream_t stream = 0);
+
+inline bool checkIfFileExist(const std::string &file_path) {
+    std::ifstream in(file_path, std::ios::in | std::ios::binary);
+    if (in.is_open()) {
+        in.close();
+        return true;
+    }
+    return false;
+}
 
 } // namespace space_llm

@@ -1,5 +1,6 @@
 #include <iostream>
 #include "utils/memory_utils.h"
+#include "utils/cuda_type_utils.cuh"
 #include <curand_kernel.h>
 #include <cuda_fp16.h>
 
@@ -240,6 +241,12 @@ int loadWeightFromBinFunc(T *ptr, std::vector<size_t> shape, std::string filenam
     return 0;
 }
 
+template int loadWeightFromBinFunc<float, float>(float *ptr, std::vector<size_t> shape, std::string filename);
+template int loadWeightFromBinFunc<half, float>(half *ptr, std::vector<size_t> shape, std::string filename);
+template int loadWeightFromBinFunc<float, half>(float *ptr, std::vector<size_t> shape, std::string filename);
+template int loadWeightFromBinFunc<half, half>(half *ptr, std::vector<size_t> shape, std::string filename);
+template int loadWeightFromBinFunc<int8_t, int8_t>(int8_t *ptr, std::vector<size_t> shape, std::string filename);
+
 template <typename T>
 int loadWeightFromBin(T *ptr, std::vector<size_t> shape, std::string filename, QKCudaDataType model_file_type) {
     switch (model_file_type) {
@@ -265,6 +272,10 @@ int loadWeightFromBin(int *ptr, std::vector<size_t> shape, std::string filename,
     loadWeightFromBinFunc<int, int>(ptr, shape, filename);
     return 0;
 }
+
+template int loadWeightFromBin(float *ptr, std::vector<size_t> shape, std::string filename, QKCudaDataType model_file_type);
+template int loadWeightFromBin(half *ptr, std::vector<size_t> shape, std::string filename, QKCudaDataType model_file_type);
+template int loadWeightFromBin(int8_t *ptr, std::vector<size_t> shape, std::string filename, QKCudaDataType model_file_type);
 
 template <typename T_IN, typename T_OUT>
 __global__ void cudaD2DcpyConvert(T_OUT *dst, const T_IN *src, const size_t size) {

@@ -7,6 +7,12 @@
 
 namespace space_llm {
 
+enum class LayerNormType {
+    pre_layernorm,
+    post_layernorm,
+    InvalidType
+};
+
 template <typename T>
 struct LayerNormWeight {
     const T *gamma = nullptr;

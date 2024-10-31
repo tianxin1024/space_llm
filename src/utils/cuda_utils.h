@@ -33,7 +33,7 @@ enum CublasDataType {
     FP8_DATATYPE = 4
 };
 
-enum FtCudaDataType {
+enum QKCudaDataType {
     FP32 = 0,
     FP16 = 1,
     BF16 = 2,
@@ -262,6 +262,8 @@ struct packed_type<__nv_bfloat16> {
     using type = __nv_bfloat162;
 };
 #endif
+
+QKCudaDataType getModelFileType(std::string ini_file, std::string section_name);
 
 template<typename T> struct num_elems;
 template <>          struct num_elems<float>           { static constexpr int value = 1; };
