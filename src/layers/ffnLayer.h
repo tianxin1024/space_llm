@@ -125,4 +125,37 @@ private:
     using ffnLayer<T>::inter_size_;
 };
 
+template <typename T>
+class ReluffnLayer : public ffnLayer<T> {
+public:
+    ReluffnLayer(size_t max_batch_size,
+                 size_t max_seq_len,
+                 size_t head_num,
+                 size_t size_per_head,
+                 size_t expert_num,
+                 size_t inter_size,
+                 cudaStream_t stream,
+                 cublasMMWrapper *cublas_wrapper,
+                 IAllocator *allocator,
+                 bool is_free_buffer_after_forward,
+                 bool sparse = false,
+                 int int8_mode = 0,
+                 bool use_gated_activation = false);
+
+    ReluffnLayer(ReluffnLayer<T> const &ffn_layer);
+
+    virtual ~ReluffnLayer() = default;
+
+protected:
+    using ffnLayer<T>::stream_;
+    virtual ActivationType getActivationType() const override {
+        return ActivationType::Relu;
+    };
+
+private:
+    using ffnLayer<T>::inter_buf_;
+    using ffnLayer<T>::inter_buf_2_;
+    using ffnLayer<T>::inter_size_;
+};
+
 } // namespace space_llm

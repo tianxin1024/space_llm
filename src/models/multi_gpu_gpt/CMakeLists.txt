@@ -10,3 +10,10 @@ set_property(TARGET ParallelGptWeight PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET ParallelGptWeight PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(ParallelGptWeight PUBLIC ParallelGptDecoderLayerWeight cuda_utils logger)
 
+add_library(ParallelGptDecoder STATIC ParallelGptDecoder.cc)
+set_property(TARGET ParallelGptDecoder PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET ParallelGptDecoder PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(ParallelGptDecoder PUBLIC -lcudart TensorParallelReluffnLayer
+                                                TensorParallelDecoderSelfAttentionLayer layernorm_kernels
+                                                add_residual_kernels tensor cuda_utils logger)
+
