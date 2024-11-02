@@ -1,4 +1,5 @@
 #include "models/multi_gpu_gpt/ParallelGptContextDecoder.h"
+#include "layers/attention_layers/TensorParallelGptContextAttentionLayer.h"
 #include "kernels/preprocess_kernels.h"
 #include "kernels/gpt_kernels.h"
 
@@ -11,7 +12,6 @@ void ParallelGptContextDecoder<T>::initialize() {
                                                                           max_seq_len_,
                                                                           head_num_,
                                                                           size_per_head_,
-                                                                          tensor_para_,
                                                                           stream_,
                                                                           cublas_wrapper_,
                                                                           allocator_,
@@ -19,9 +19,7 @@ void ParallelGptContextDecoder<T>::initialize() {
                                                                           is_free_buffer_after_forward_,
                                                                           is_qk_buf_float_,
                                                                           sparse_,
-                                                                          int8_mode_,
-                                                                          custom_all_reduce_comm_,
-                                                                          enable_custom_all_reduce_);
+                                                                          int8_mode_);
 
     bool use_gated_activation = activation_type_ == ActivationType::GeGLU || activation_type_ == ActivationType::ReGLU;
     size_t max_inter_size = has_adapters_ ? std::max(inter_size_, adapter_inter_size_) : inter_size_;

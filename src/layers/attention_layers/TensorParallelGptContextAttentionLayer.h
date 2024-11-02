@@ -18,8 +18,7 @@ public:
                                            bool is_free_buffer_after_forward,
                                            bool is_qk_buf_float,
                                            bool sparse = false,
-                                           int int8_mode = 0,
-                                           int enable_custom_all_reduce = 0);
+                                           int int8_mode = 0);
 
     TensorParallelGptContextAttentionLayer(size_t max_batch_size,
                                            size_t max_seq_len,
@@ -34,8 +33,7 @@ public:
                                            bool is_free_buffer_after_forward,
                                            bool is_qk_buf_float,
                                            bool sparse = false,
-                                           int int8_mode = 0,
-                                           int enable_custom_all_reduce = 0);
+                                           int int8_mode = 0);
 
     TensorParallelGptContextAttentionLayer(TensorParallelGptContextAttentionLayer<T> const &attention_layer);
 
