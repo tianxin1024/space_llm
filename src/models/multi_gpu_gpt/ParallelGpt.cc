@@ -22,8 +22,7 @@ void ParallelGpt<T>::initialize() {
                                                            is_context_qk_buf_float_,
                                                            attention_type_,
                                                            sparse_,
-                                                           int8_mode_,
-                                                           enable_custom_all_reduce_);
+                                                           int8_mode_);
 }
 
 template <typename T>
