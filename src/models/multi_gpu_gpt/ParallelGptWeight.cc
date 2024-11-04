@@ -332,4 +332,14 @@ void ParallelGptWeight<T>::loadModel(std::string dir_path) {
     }
 }
 
+template <typename T>
+bool ParallelGptWeight<T>::isValidLayerParallelId(int l) {
+    int local_num_layer = (int)(ceil(num_layer_ * 1.0f / layer_para_size_));
+    return l < num_layer_ && (l >= local_num_layer * layer_para_rank_)
+           && (l < local_num_layer * (layer_para_rank_ + 1));
+}
+
+template struct ParallelGptWeight<float>;
+template struct ParallelGptWeight<half>;
+
 } // namespace space_llm

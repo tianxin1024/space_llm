@@ -69,6 +69,98 @@ ParallelGptDecoderLayerWeight<T>::~ParallelGptDecoderLayerWeight() {
 }
 
 template <typename T>
+void ParallelGptDecoderLayerWeight<T>::copyFrom(const ParallelGptDecoderLayerWeight &other) {
+    cudaD2Dcpy(weights_ptr[0], other.weights_ptr[0], hidden_units_);
+    cudaD2Dcpy(weights_ptr[1], other.weights_ptr[1], hidden_units_);
+    cudaD2Dcpy(weights_ptr[3], other.weights_ptr[3], 3 * hidden_units_ / tensor_para_size_);
+    cudaD2Dcpy(weights_ptr[5], other.weights_ptr[5], hidden_units_);
+    cudaD2Dcpy(weights_ptr[6], other.weights_ptr[6], hidden_units_);
+    cudaD2Dcpy(weights_ptr[7], other.weights_ptr[7], hidden_units_);
+    cudaD2Dcpy(weights_ptr[9], other.weights_ptr[9], inter_size_ / tensor_para_size_);
+    cudaD2Dcpy(weights_ptr[11], other.weights_ptr[11], hidden_units_);
+
+    if (gpt_variant_params_.has_adapters) {
+        // Copy adapter biases regardless of int8 mode
+        cudaD2Dcpy(weights_ptr[13], other.weights_ptr[13], gpt_variant_params_.adapter_inter_size / tensor_para_size_);
+        cudaD2Dcpy(weights_ptr[15], other.weights_ptr[15], hidden_units_);
+        cudaD2Dcpy(weights_ptr[17], other.weights_ptr[17], gpt_variant_params_.adapter_inter_size / tensor_para_size_);
+        cudaD2Dcpy(weights_ptr[19], other.weights_ptr[19], hidden_units_);
+    }
+
+    if (int8_mode_ == 0) {
+        cudaD2Dcpy(weights_ptr[2], other.weights_ptr[2], hidden_units_ * 3 * hidden_units_ / tensor_para_size_);
+        cudaD2Dcpy(weights_ptr[4], other.weights_ptr[4], hidden_units_ / tensor_para_size_ * hidden_units_);
+        cudaD2Dcpy(weights_ptr[8], other.weights_ptr[8], hidden_units_ * inter_size_ / tensor_para_size_);
+        cudaD2Dcpy(weights_ptr[10], other.weights_ptr[10], inter_size_ / tensor_para_size_ * hidden_units_);
+
+        if (gpt_variant_params_.has_adapters) {
+            cudaD2Dcpy(weights_ptr[12],
+                       other.weights_ptr[12],
+                       hidden_units_ * gpt_variant_params_.adapter_inter_size / tensor_para_size_);
+            cudaD2Dcpy(weights_ptr[14],
+                       other.weights_ptr[14],
+                       gpt_variant_params_.adapter_inter_size / tensor_para_size_ * hidden_units_);
+            cudaD2Dcpy(weights_ptr[16],
+                       other.weights_ptr[16],
+                       hidden_units_ * gpt_variant_params_.adapter_inter_size / tensor_para_size_);
+            cudaD2Dcpy(weights_ptr[18],
+                       other.weights_ptr[18],
+                       gpt_variant_params_.adapter_inter_size / tensor_para_size_ * hidden_units_);
+        }
+    } else {
+        cudaD2Dcpy(
+            int8_weights_ptr[0], other.int8_weights_ptr[0], hidden_units_ * 3 * hidden_units_ / tensor_para_size_);
+        cudaD2Dcpy(int8_weights_ptr[1], other.int8_weights_ptr[1], hidden_units_ / tensor_para_size_ * hidden_units_);
+        cudaD2Dcpy(int8_weights_ptr[2], other.int8_weights_ptr[2], hidden_units_ * inter_size_ / tensor_para_size_);
+        cudaD2Dcpy(int8_weights_ptr[3], other.int8_weights_ptr[3], inter_size_ / tensor_para_size_ * hidden_units_);
+
+        if (gpt_variant_params_.has_adapters) {
+            // Copy weights for FFN adapters after attn and regular FFN
+            cudaD2Dcpy(int8_weights_ptr[4],
+                       other.int8_weights_ptr[4],
+                       hidden_units_ * gpt_variant_params_.adapter_inter_size / tensor_para_size_);
+            cudaD2Dcpy(int8_weights_ptr[5],
+                       other.int8_weights_ptr[5],
+                       gpt_variant_params_.adapter_inter_size / tensor_para_size_ * hidden_units_);
+            cudaD2Dcpy(int8_weights_ptr[6],
+                       other.int8_weights_ptr[6],
+                       hidden_units_ * gpt_variant_params_.adapter_inter_size / tensor_para_size_);
+            cudaD2Dcpy(int8_weights_ptr[7],
+                       other.int8_weights_ptr[7],
+                       gpt_variant_params_.adapter_inter_size / tensor_para_size_ * hidden_units_);
+        }
+
+        if (int8_mode_ == 1) {
+            cudaD2Dcpy(weight_only_scale_ptr[0], other.weight_only_scale_ptr[0], 3 * hidden_units_ / tensor_para_size_);
+            cudaD2Dcpy(weight_only_scale_ptr[1], other.weight_only_scale_ptr[1], hidden_units_);
+            cudaD2Dcpy(weight_only_scale_ptr[2], other.weight_only_scale_ptr[2], inter_size_ / tensor_para_size_);
+            cudaD2Dcpy(weight_only_scale_ptr[3], other.weight_only_scale_ptr[3], hidden_units_);
+
+            if (gpt_variant_params_.has_adapters) {
+                cudaD2Dcpy(weight_only_scale_ptr[4],
+                           other.weight_only_scale_ptr[4],
+                           gpt_variant_params_.adapter_inter_size / tensor_para_size_);
+                cudaD2Dcpy(weight_only_scale_ptr[5], other.weight_only_scale_ptr[5], hidden_units_);
+                cudaD2Dcpy(weight_only_scale_ptr[6],
+                           other.weight_only_scale_ptr[6],
+                           gpt_variant_params_.adapter_inter_size / tensor_para_size_);
+                cudaD2Dcpy(weight_only_scale_ptr[7], other.weight_only_scale_ptr[7], hidden_units_);
+            }
+        } else if (int8_mode_ == 2) {
+            cudaD2Dcpy(scale_ptr[0], other.scale_out_ptr[0], 1);
+            cudaD2Dcpy(scale_inter_ptr[0], other.scale_inter_ptr[0], 3 * hidden_units_ / tensor_para_size_);
+            cudaD2Dcpy(scale_out_ptr[0], other.scale_out_ptr[0], 3);
+
+            for (int i = 1; i < 4; i++) {
+                cudaD2Dcpy(scale_ptr[i], other.scale_ptr[i], 1);
+                cudaD2Dcpy(scale_inter_ptr[i], other.scale_inter_ptr[i], 1);
+                cudaD2Dcpy(scale_out_ptr[i], other.scale_out_ptr[i], 1);
+            }
+        }
+    }
+}
+
+template <typename T>
 ParallelGptDecoderLayerWeight<T>::ParallelGptDecoderLayerWeight(const ParallelGptDecoderLayerWeight &other) :
     hidden_units_(other.hidden_units_),
     inter_size_(other.inter_size_),
@@ -241,5 +333,8 @@ void ParallelGptDecoderLayerWeight<T>::setWeightPtr() {
 
     is_maintain_buffer = true;
 }
+
+template struct ParallelGptDecoderLayerWeight<float>;
+template struct ParallelGptDecoderLayerWeight<half>;
 
 } // namespace space_llm

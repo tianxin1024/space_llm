@@ -195,7 +195,7 @@ void gpt_example(const INIReader reader) {
     cudaStreamCreate(&stream);
     cublasCreate(&cublas_handle);
     cublasLtCreate(&cublaslt_handle);
-    cublasSetStream(&cublas_handle, stream);
+    cublasSetStream(cublas_handle, stream);
 
     cublasAlgoMap *cublas_algo_map = new cublasAlgoMap(GEMM_CONFIG);
 

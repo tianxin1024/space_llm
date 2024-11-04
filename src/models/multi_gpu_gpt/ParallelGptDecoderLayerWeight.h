@@ -50,6 +50,7 @@ public:
     ffnWeight<T> after_ffn_adapter_weights;
 
 protected:
+    void copyFrom(const ParallelGptDecoderLayerWeight &other);
     void setWeightPtr();
     void mallocWeights();
     bool isValidLayerParallelId(int l);

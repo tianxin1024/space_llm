@@ -4,25 +4,51 @@ namespace space_llm {
 
 template <typename T>
 void ParallelGpt<T>::initialize() {
-    gpt_context_decoder_ = new ParalelGptContextDecoder<T>(0,
-                                                           0,
-                                                           head_num_,
-                                                           size_per_head_,
-                                                           inter_size_,
-                                                           num_layer_,
-                                                           expert_num_,
-                                                           moe_k_,
-                                                           moe_layer_index_,
-                                                           layernorm_eps_,
-                                                           gpt_variant_params_,
-                                                           stream_,
-                                                           cublas_wrapper_,
-                                                           allocator_,
-                                                           if_free_buffer_after_forward_,
-                                                           is_context_qk_buf_float_,
-                                                           attention_type_,
-                                                           sparse_,
-                                                           int8_mode_);
+    gpt_context_decoder_ = new ParallelGptContextDecoder<T>(0,
+                                                            0,
+                                                            head_num_,
+                                                            size_per_head_,
+                                                            inter_size_,
+                                                            num_layer_,
+                                                            expert_num_,
+                                                            moe_k_,
+                                                            moe_layer_index_,
+                                                            layernorm_eps_,
+                                                            gpt_variant_params_,
+                                                            stream_,
+                                                            cublas_wrapper_,
+                                                            allocator_,
+                                                            is_free_buffer_after_forward_,
+                                                            is_context_qk_buf_float_,
+                                                            attention_type_,
+                                                            sparse_,
+                                                            int8_mode_);
+
+    gpt_decoder_ = new ParallelGptDecoder<T>(0,
+                                             head_num_,
+                                             size_per_head_,
+                                             inter_size_,
+                                             num_layer_,
+                                             expert_num_,
+                                             moe_k_,
+                                             moe_layer_index_,
+                                             layernorm_eps_,
+                                             gpt_variant_params_,
+                                             stream_,
+                                             cublas_wrapper_,
+                                             allocator_,
+                                             is_free_buffer_after_forward_,
+                                             sparse_,
+                                             int8_mode_);
+
+    // dynamic_decode_layer_ = new DynamicDecodeLayer<float>(vocab_size_,
+    //                                                       vocab_size_padded_,
+    //                                                       0, // end_id, deprecated
+    //                                                       stream_,
+    //                                                       cublas_wrapper_,
+    //                                                       allocator_,
+    //                                                       is_free_buffer_after_forward_,
+    //                                                       cuda_device_prop_);
 }
 
 template <typename T>
@@ -135,8 +161,11 @@ template <typename T>
 ParallelGpt<T>::~ParallelGpt() {
     delete gpt_decoder_;
     delete gpt_context_decoder_;
-    delete dynamic_decode_layer_;
+    // delete dynamic_decode_layer_;
     freeBuffer();
 }
+
+template class ParallelGpt<float>;
+template class ParallelGpt<half>;
 
 } // namespace space_llm

@@ -3,7 +3,10 @@
 #include "utils/prompt_learning.h"
 #include "layers/BaseLayer.h"
 #include "layers/attention_layers/BaseAttentionLayer.h"
+#include "models/multi_gpu_gpt/ParallelGptContextDecoder.h"
+#include "models/multi_gpu_gpt/ParallelGptDecoder.h"
 #include "models/multi_gpu_gpt/ParallelGptDecoderLayerWeight.h"
+#include "models/multi_gpu_gpt/ParallelGptWeight.h"
 
 namespace space_llm {
 
@@ -56,6 +59,16 @@ private:
     // GPT Variants parameters: e.g. Meta OPT
     gptVariantParams gpt_variant_params_;
 
+    ParallelGptDecoder<T> *gpt_decoder_;
+    ParallelGptContextDecoder<T> *gpt_context_decoder_;
+    // DynamicDecodeLayer<float> *dynamic_decode_layer_;
+
+    void initialize();
+
+protected:
+    // For stateful processing (interactive generation)
+    int step_;
+
 public:
     ParallelGpt(size_t max_batch_size,
                 size_t max_seq_len,
@@ -94,6 +107,12 @@ public:
                 float shared_contexts_ratio = 1.0f);
 
     ParallelGpt(ParallelGpt<T> const &gpt);
+
+    ~ParallelGpt();
+
+    void forward(std::vector<Tensor> *output_tensors,
+                 const std::vector<Tensor> *input_tensors,
+                 const ParallelGptWeight<T> *gpt_weights);
 };
 
 } // namespace space_llm
