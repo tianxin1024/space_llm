@@ -196,12 +196,13 @@ void ParallelGptDecoderLayerWeight<T>::loadModel(std::string dir_path, QKCudaDat
     loadWeightFromBin<T>(weights_ptr[0], {hidden_units_}, dir_path + ".input_layernorm.bias.bin", model_file_type);
     loadWeightFromBin<T>(weights_ptr[1], {hidden_units_}, dir_path + ".input_layernorm.weight.bin", model_file_type);
     loadWeightFromBin<T>(weights_ptr[3], {3, hidden_units_ / tensor_para_size_},
-                         dir_path + ".attention_query_key_value.bias." + std::to_string(tensor_para_rank_) + ".bin", model_file_type);
+                         dir_path + ".attention.query_key_value.bias." + std::to_string(tensor_para_rank_) + ".bin", model_file_type);
     loadWeightFromBin<T>(weights_ptr[5], {hidden_units_}, dir_path + ".attention.dense.bias.bin", model_file_type);
     loadWeightFromBin<T>(weights_ptr[6], {hidden_units_}, dir_path + ".post_attention_layernorm.bias.bin", model_file_type);
     loadWeightFromBin<T>(weights_ptr[7], {hidden_units_}, dir_path + ".post_attention_layernorm.weight.bin", model_file_type);
-    loadWeightFromBin<T>(weights_ptr[9], {inter_size_ / tensor_para_size_},
+    loadWeightFromBin<T>(weights_ptr[9], {inter_size_},
                          dir_path + ".mlp.dense_h_to_4h.bias." + std::to_string(tensor_para_rank_) + ".bin", model_file_type);
+
     loadWeightFromBin<T>(weights_ptr[11], {hidden_units_}, dir_path + ".mlp.dense_4h_to_h.bias.bin", model_file_type);
 
     if (gpt_variant_params_.has_adapters) {
@@ -271,7 +272,7 @@ void ParallelGptDecoderLayerWeight<T>::mallocWeights() {
     deviceMalloc(&weights_ptr[5], hidden_units_);                         // attention output bias
     deviceMalloc(&weights_ptr[6], hidden_units_);                         // attn layer norm beta
     deviceMalloc(&weights_ptr[7], hidden_units_);                         // attn layer norm gamma
-    deviceMalloc(&weights_ptr[9], hidden_units_);                         // ffn inter bias
+    deviceMalloc(&weights_ptr[9], inter_size_ / tensor_para_size_);       // ffn inter bias
     deviceMalloc(&weights_ptr[11], hidden_units_);                        // ffn output bais
 
     // Alloc biases adapters. They do not get quantized so are placed here.

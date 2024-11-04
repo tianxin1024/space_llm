@@ -48,6 +48,12 @@ demo_vit:
 debug_vit:
 	@cd debug && gdb -x ./demo_vit.gdb
 
+gpt:
+	@cd build/bin && ./gpt_example
+
+debug_gpt:
+	@cd debug/gpt && gdb -x ./gpt_debug.gdb
+
 check-python:
 	@command -v python3 >/dev/null 2>&1 || { echo >&2 "Python is not installed.  Aborting."; exit 1; }
 

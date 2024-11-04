@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     if (argc == 2) {
         ini_name = std::string(argv[1]);
     } else {
-        ini_name = "../examples/gpt/gpt_config.ini";
+        ini_name = "../../examples/gpt/gpt_config.ini";
     }
 
     INIReader reader = INIReader(ini_name);
