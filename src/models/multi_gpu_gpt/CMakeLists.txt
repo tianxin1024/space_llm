@@ -17,10 +17,18 @@ target_link_libraries(ParallelGptDecoder PUBLIC -lcudart
                                                 layernorm_kernels
                                                 add_residual_kernels tensor cuda_utils logger)
 
+add_library(ParallelGptContextDecoder STATIC ParallelGptContextDecoder.cc)
+set_property(TARGET ParallelGptDecoder PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET ParallelGptDecoder PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(ParallelGptContextDecoder PUBLIC -lcudart TensorParallelReluFfnLayer 
+                                                TensorParallelGptContextAttentionLayer layernorm_kernels
+                                                add_residual_kernels preprocess_kernels gpt_kernels tensor
+                                                cuda_utils logger)
+
 add_library(ParallelGpt STATIC ParallelGpt.cc)
 set_property(TARGET ParallelGpt PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET ParallelGpt PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
-target_link_libraries(ParallelGpt PUBLIC -lcudart ParallelGptDecoder gpt_kernels
+target_link_libraries(ParallelGpt PUBLIC -lcudart ParallelGptDecoder gpt_kernels ParallelGptContextDecoder
                       preprocess_kernels ParallelGptWeight cublasAlgoMap cublasMMWrapper
                       cuda_utils logger)
 

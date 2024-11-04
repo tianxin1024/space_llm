@@ -251,6 +251,24 @@ inline int getDeviceCount() {
     return count;
 }
 
+template <typename T>
+cudaDataType_t getCudaDataType() {
+    if (std::is_same<T, half>::value) {
+        return CUDA_R_16F;
+    }
+#ifdef ENABLE_BF16
+    else if (std::is_same<T, __nv_bfloat16>::value) {
+        return CUDA_R_16BF;
+    }
+#endif
+    else if (std::is_same<T, float>::value) {
+        return CUDA_R_32F;
+    } else {
+        QK_CHECK(false);
+        return CUDA_R_32F;
+    }
+}
+
 // clang-format off
 template<typename T> struct packed_type;
 template <>          struct packed_type<float>         { using type = float; }; // we don't need to pack float by default

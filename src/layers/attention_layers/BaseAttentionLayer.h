@@ -34,4 +34,8 @@ public:
     }
 };
 
+inline bool isUnPaddedMHA(AttentionType attention_type) {
+    return attention_type == AttentionType::FUSED_MHA || attention_type == AttentionType::UNFUSED_MHA;
+}
+
 } // namespace space_llm

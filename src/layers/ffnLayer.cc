@@ -340,4 +340,41 @@ GeluffnLayer<T>::GeluffnLayer(GeluffnLayer<T> const &gelu_ffn_layer) :
 template class GeluffnLayer<float>;
 template class GeluffnLayer<half>;
 
+template <typename T>
+ReluffnLayer<T>::ReluffnLayer(size_t max_batch_size,
+                              size_t max_seq_len,
+                              size_t head_num,
+                              size_t size_per_head,
+                              size_t expert_num,
+                              size_t inter_size,
+                              cudaStream_t stream,
+                              cublasMMWrapper *cublas_wrapper,
+                              IAllocator *allocator,
+                              bool is_free_buffer_after_forward,
+                              bool sparse,
+                              int int8_mode,
+                              bool use_gated_activation) :
+    ffnLayer<T>(max_batch_size,
+                max_seq_len,
+                head_num,
+                size_per_head,
+                expert_num,
+                inter_size,
+                stream,
+                cublas_wrapper,
+                allocator,
+                is_free_buffer_after_forward,
+                sparse,
+                int8_mode,
+                use_gated_activation) {
+}
+
+template <typename T>
+ReluffnLayer<T>::ReluffnLayer(ReluffnLayer<T> const &relu_ffn_layer) :
+    ffnLayer<T>(relu_ffn_layer) {
+}
+
+template class ReluffnLayer<float>;
+template class ReluffnLayer<half>;
+
 } // namespace space_llm

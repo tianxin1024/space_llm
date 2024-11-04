@@ -513,17 +513,18 @@ void ParallelGptContextDecoder<T>::forward(
                     int8_mode_,
                     stream_);
             } else if (layernorm_type_ == LayerNormType::post_layernorm) {
-                invokeAddBiasResidualLayerNorm(after_adapter_attn_output_,
-                                               decoder_input,
-                                               has_adapters_ ?
-                                                   layer_weight->after_attention_adapter_weights.output_weight.bias :
-                                                   layer_weight->self_attention_weights.attention_output_weight.bias,
-                                               layer_weight->pre_layernorm_weights.gamma,
-                                               layer_weight->pre_layernorm_weights.beta,
-                                               layernorm_eps_,
-                                               h_token_num,
-                                               hidden_units_,
-                                               stream_);
+                // TODO tianxin
+                // invokeAddBiasResidualLayerNorm(after_adapter_attn_output_,
+                //                                decoder_input,
+                //                                has_adapters_ ?
+                //                                    layer_weight->after_attention_adapter_weights.output_weight.bias :
+                //                                    layer_weight->self_attention_weights.attention_output_weight.bias,
+                //                                layer_weight->pre_layernorm_weights.gamma,
+                //                                layer_weight->pre_layernorm_weights.beta,
+                //                                layernorm_eps_,
+                //                                h_token_num,
+                //                                hidden_units_,
+                //                                stream_);
             }
             sync_check_cuda_error();
 
@@ -624,17 +625,18 @@ void ParallelGptContextDecoder<T>::forward(
                                           hidden_units_,
                                           stream_);
                 } else if (layernorm_type_ == LayerNormType::post_layernorm) {
-                    invokeAddBiasResidualLayerNorm(decoder_output,
-                                                   after_adapter_attn_output_,
-                                                   has_adapters_ ?
-                                                       layer_weight->after_ffn_adapter_weights.output_weight.bias :
-                                                       layer_weight->ffn_weights.output_weight.bias,
-                                                   layer_weight->self_attn_layernorm_weights.gamma,
-                                                   layer_weight->self_attn_layernorm_weights.beta,
-                                                   layernorm_eps_,
-                                                   h_token_num,
-                                                   hidden_units_,
-                                                   stream_);
+                    // TODO tianxin
+                    // invokeAddBiasResidualLayerNorm(decoder_output,
+                    //                                after_adapter_attn_output_,
+                    //                                has_adapters_ ?
+                    //                                    layer_weight->after_ffn_adapter_weights.output_weight.bias :
+                    //                                    layer_weight->ffn_weights.output_weight.bias,
+                    //                                layer_weight->self_attn_layernorm_weights.gamma,
+                    //                                layer_weight->self_attn_layernorm_weights.beta,
+                    //                                layernorm_eps_,
+                    //                                h_token_num,
+                    //                                hidden_units_,
+                    //                                stream_);
                 }
             } else {
                 // TODO ...
@@ -675,6 +677,31 @@ void ParallelGptContextDecoder<T>::forward(
         freeBuffer();
     }
     QK_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
+}
+
+template <typename T>
+bool ParallelGptContextDecoder<T>::isValidLayerParallelId(uint l) {
+    int local_num_layer = (int)(ceil(num_layer_ * 1.0f));
+    return l < num_layer_ && (l >= local_num_layer)
+           && (l < local_num_layer * 1);
+}
+
+template <typename T>
+bool ParallelGptContextDecoder<T>::isFirstLayerParallelId(uint l) {
+    int local_num_layer = (int)(ceil(num_layer_ * 1.0f));
+    return l < num_layer_ && (l == local_num_layer);
+}
+
+template <typename T>
+bool ParallelGptContextDecoder<T>::isLastLayerParallelId(uint l) {
+    int local_num_layer = (int)(ceil(num_layer_ * 1.0f));
+    return l < num_layer_ && (l == local_num_layer - 1);
+}
+
+template <typename T>
+int ParallelGptContextDecoder<T>::getFirstLayerParallelId() {
+    int local_num_layer = (int)(ceil(num_layer_ * 1.0f));
+    return local_num_layer;
 }
 
 template class ParallelGptContextDecoder<float>;

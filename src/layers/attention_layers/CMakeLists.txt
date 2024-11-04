@@ -4,3 +4,20 @@ add_library(UnfusedAttentionLayer STATIC UnfusedAttentionLayer.cc)
 set_property(TARGET UnfusedAttentionLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET UnfusedAttentionLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(UnfusedAttentionLayer PUBLIC -lcublas -lcudart cublasMMWrapper memory_utils unfused_attention_kernels)
+
+add_library(GptContextAttentionLayer STATIC GptContextAttentionLayer.cc)
+set_property(TARGET GptContextAttentionLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET GptContextAttentionLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(GptContextAttentionLayer PUBLIC -lcublas -lcudart cublasMMWrapper memory_utils unfused_attention_kernels)
+
+add_library(TensorParallelGptContextAttentionLayer STATIC TensorParallelGptContextAttentionLayer.cc)
+set_property(TARGET TensorParallelGptContextAttentionLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET TensorParallelGptContextAttentionLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(TensorParallelGptContextAttentionLayer PUBLIC -lcudart GptContextAttentionLayer)
+
+add_library(TensorParallelReluFfnLayer STATIC TensorParallelReluFfnLayer.cc)
+set_property(TARGET TensorParallelReluFfnLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET TensorParallelReluFfnLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(TensorParallelReluFfnLayer PUBLIC -lcudart ffnLayer tensor)
+
+

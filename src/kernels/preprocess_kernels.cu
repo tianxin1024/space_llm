@@ -132,4 +132,36 @@ template void invokeRebuildPadding(
 template void invokeRebuildPadding(
     half *dst, const half *src, const int *padding_offset, const int token_num, const int hidden_dim, cudaStream_t stream);
 
+template <typename T>
+__global__ void remove_padding(T *tgt, const T *src, const int *padding_offset, const int n) {
+    const int tid = threadIdx.x;
+    const int bid = blockIdx.x;
+    const int src_seq_id = bid + padding_offset[bid];
+    const int tgt_seq_id = bid;
+
+    for (int i = tid; i < n; i += blockDim.x) {
+        tgt[tgt_seq_id * n + i] = src[src_seq_id * n + i];
+    }
+}
+
+template <typename T>
+void invokeRemovePadding(
+    T *dst, const T *src, const int *padding_offset, const int token_num, const int hidden_dim, cudaStream_t stream) {
+    remove_padding<<<token_num, 256, 0, stream>>>(dst, src, padding_offset, hidden_dim);
+}
+
+template void invokeRemovePadding(float *dst,
+                                  const float *src,
+                                  const int *padding_offset,
+                                  const int token_num,
+                                  const int hidden_dim,
+                                  cudaStream_t stream);
+
+template void invokeRemovePadding(half *dst,
+                                  const half *src,
+                                  const int *padding_offset,
+                                  const int token_num,
+                                  const int hidden_dim,
+                                  cudaStream_t stream);
+
 } // namespace space_llm
