@@ -315,18 +315,18 @@ void ParallelGptDecoder<T>::forward(std::unordered_map<std::string, Tensor> *out
                 int8_mode_,
                 stream_);
         } else if (layernorm_type_ == LayerNormType::post_layernorm) {
-            invokeAddBiasResidualLayerNorm(
-                // check correctness.
-                after_adapter_attn_output_,
-                decoder_input,
-                has_adapters_ ? layer_weight->after_attention_adapter_weights.output_weight.bias :
-                                layer_weight->self_attention_weights.attention_output_weight.bias,
-                layer_weight->pre_layernorm_weights.gamma,
-                layer_weight->pre_layernorm_weights.beta,
-                layernorm_eps_,
-                local_batch_size,
-                hidden_units_,
-                stream_);
+            // invokeAddBiasResidualLayerNorm(
+            //     // check correctness.
+            //     after_adapter_attn_output_,
+            //     decoder_input,
+            //     has_adapters_ ? layer_weight->after_attention_adapter_weights.output_weight.bias :
+            //                     layer_weight->self_attention_weights.attention_output_weight.bias,
+            //     layer_weight->pre_layernorm_weights.gamma,
+            //     layer_weight->pre_layernorm_weights.beta,
+            //     layernorm_eps_,
+            //     local_batch_size,
+            //     hidden_units_,
+            //     stream_);
         }
 
         sync_check_cuda_error();
@@ -428,59 +428,20 @@ void ParallelGptDecoder<T>::forward(std::unordered_map<std::string, Tensor> *out
                                       hidden_units_,
                                       stream_);
             } else if (layernorm_type_ == LayerNormType::post_layernorm) {
-                invokeAddBiasResidualLayerNorm(decoder_output,
-                                               after_adapter_attn_output_,
-                                               has_adapters_ ?
-                                                   layer_weight->after_ffn_adapter_weights.output_weight.bias :
-                                                   layer_weight->ffn_weights.output_weight.bias,
-                                               layer_weight->self_attn_layernorm_weights.gamma,
-                                               layer_weight->self_attn_layernorm_weights.beta,
-                                               layernorm_eps_,
-                                               local_batch_size,
-                                               hidden_units_,
-                                               stream_);
+                // invokeAddBiasResidualLayerNorm(decoder_output,
+                //                                after_adapter_attn_output_,
+                //                                has_adapters_ ?
+                //                                    layer_weight->after_ffn_adapter_weights.output_weight.bias :
+                //                                    layer_weight->ffn_weights.output_weight.bias,
+                //                                layer_weight->self_attn_layernorm_weights.gamma,
+                //                                layer_weight->self_attn_layernorm_weights.beta,
+                //                                layernorm_eps_,
+                //                                local_batch_size,
+                //                                hidden_units_,
+                //                                stream_);
             }
         } else {
-            if (layernorm_type_ == LayerNormType::pre_layernorm) {
-                finalize_moe_routing_kernelLauncher(fc2_result_,
-                                                    decoder_output,
-                                                    after_adapter_attn_output_,
-                                                    has_adapters_ ? ffn_output_ptr : nullptr,
-                                                    has_adapters_ ?
-                                                        layer_weight->after_ffn_adapter_weights.output_weight.bias :
-                                                        layer_weight->ffn_weights.output_weight.bias,
-                                                    expert_scales_,
-                                                    expanded_source_row_to_expanded_dest_row_,
-                                                    expert_for_source_row_,
-                                                    local_batch_size,
-                                                    hidden_units_,
-                                                    moe_k_,
-                                                    stream_);
-            } else if (layernorm_type_ == LayerNormType::post_layernorm) {
-                finalize_moe_routing_kernelLauncher(fc2_result_,
-                                                    decoder_output,
-                                                    after_adapter_attn_output_,
-                                                    has_adapters_ ?
-                                                        layer_weight->after_ffn_adapter_weights.output_weight.bias :
-                                                        layer_weight->ffn_weights.output_weight.bias,
-                                                    expert_scales_,
-                                                    expanded_source_row_to_expanded_dest_row_,
-                                                    expert_for_source_row_,
-                                                    local_batch_size,
-                                                    hidden_units_,
-                                                    moe_k_,
-                                                    stream_);
-                invokeGeneralLayerNorm(decoder_output,
-                                       decoder_output,
-                                       layer_weight->self_attn_layernorm_weights.gamma,
-                                       layer_weight->self_attn_layernorm_weights.beta,
-                                       layernorm_eps_,
-                                       local_batch_size,
-                                       hidden_units_,
-                                       (float *)nullptr,
-                                       0,
-                                       stream_);
-            }
+            // TODO ...
         }
         sync_check_cuda_error();
     }
@@ -489,4 +450,29 @@ void ParallelGptDecoder<T>::forward(std::unordered_map<std::string, Tensor> *out
         freeBuffer();
     }
 }
+
+template <typename T>
+void ParallelGptDecoder<T>::freeBuffer() {
+    if (is_allocate_buffer_) {
+        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
+        allocator_->free((void **)(&decoder_layer_output_));
+        allocator_->free((void **)(&decoder_normed_input_));
+        allocator_->free((void **)(&self_attn_output_));
+        allocator_->free((void **)(&normed_self_attn_output_));
+        if (has_adapters_) {
+            allocator_->free((void **)(&after_adapter_attn_output_));
+            allocator_->free((void **)(&adapter_fc2_result_));
+        }
+        is_allocate_buffer_ = false;
+
+        allocator_->free((void **)(&expert_scales_));
+        allocator_->free((void **)(&expanded_source_row_to_expanded_dest_row_));
+        allocator_->free((void **)(&expert_for_source_row_));
+        allocator_->free((void **)(&fc2_result_));
+    }
+}
+
+template class ParallelGptDecoder<float>;
+template class ParallelGptDecoder<half>;
+
 } // namespace space_llm

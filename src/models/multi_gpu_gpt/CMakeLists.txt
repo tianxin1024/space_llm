@@ -14,7 +14,7 @@ add_library(ParallelGptDecoder STATIC ParallelGptDecoder.cc)
 set_property(TARGET ParallelGptDecoder PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET ParallelGptDecoder PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(ParallelGptDecoder PUBLIC -lcudart 
-                                                layernorm_kernels
+                                                layernorm_kernels TensorParallelDecoderSelfAttentionLayer  
                                                 add_residual_kernels tensor cuda_utils logger)
 
 add_library(ParallelGptContextDecoder STATIC ParallelGptContextDecoder.cc)
@@ -29,6 +29,6 @@ add_library(ParallelGpt STATIC ParallelGpt.cc)
 set_property(TARGET ParallelGpt PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET ParallelGpt PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(ParallelGpt PUBLIC -lcudart ParallelGptDecoder gpt_kernels ParallelGptContextDecoder
-                      preprocess_kernels ParallelGptWeight cublasAlgoMap cublasMMWrapper
+                      preprocess_kernels ParallelGptWeight 
                       cuda_utils logger)
 

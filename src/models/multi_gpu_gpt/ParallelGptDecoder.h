@@ -2,6 +2,7 @@
 
 #include "layers/BaseLayer.h"
 #include "kernels/layernorm_kernels.h"
+#include "kernels/add_residual_kernels.h"
 #include "utils/activation_types.h"
 #include "layers/attention_layers/BaseAttentionLayer.h"
 #include "layers/ffnLayer.h"
