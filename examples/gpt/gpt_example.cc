@@ -10,6 +10,7 @@
 #include "utils/memory_utils.h"
 #include "layers/attention_layers/BaseAttentionLayer.h"
 #include "models/multi_gpu_gpt/ParallelGptWeight.h"
+#include "models/multi_gpu_gpt/ParallelGpt.h"
 
 using namespace space_llm;
 
@@ -216,4 +217,41 @@ void gpt_example(const INIReader reader) {
     ParallelGptWeight<T> gpt_weights(hidden_units, inter_size, vocab_size, decoder_layers, max_seq_len, 1, 0, 1, 0, 0);
 
     gpt_weights.loadModel(model_dir);
+
+    AttentionType attention_type = AttentionType::UNFUSED_MHA;
+
+    ParallelGpt<T> gpt = ParallelGpt<T>(0, // max_batch_size, QK will adjust the buffer automatically.
+                                        0, // max_seq_len, QK will adjust the buffer automatically.
+                                        0, // max_input_len, QK will adjust the buffer automatically.
+                                        beam_width,
+                                        head_num,
+                                        size_per_head,
+                                        inter_size,
+                                        decoder_layers,
+                                        0,  // expert_num
+                                        0,  // moe_k
+                                        {}, // moe_layer_index
+                                        vocab_size,
+                                        start_id,
+                                        end_id,
+                                        end_id + 1, // p_prompt_tuning token start id
+                                        PromptLearningType::no_prompt,
+                                        gptVariantParams{},
+                                        0.0f, // beam_search_diversity_rate,
+                                        0,    // top_k,
+                                        0.0,  // top_p,
+                                        0,    // random_seed,
+                                        1.0f, // temperature,
+                                        0.0f, // len_penalty,
+                                        1.0f, // repetition_penalty,
+                                        stream,
+                                        &cublas_wrapper,
+                                        &allocator,
+                                        false,
+                                        &prop,
+                                        attention_type,
+                                        sparse,
+                                        0,
+                                        0,
+                                        shared_contexts_ratio);
 }

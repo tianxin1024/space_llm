@@ -63,11 +63,78 @@ private:
     ParallelGptContextDecoder<T> *gpt_context_decoder_;
     // DynamicDecodeLayer<float> *dynamic_decode_layer_;
 
+    void allocateBuffer() override;
+    void allocateBuffer(size_t batch_size,
+                        size_t beam_width,
+                        size_t max_seq_len,
+                        size_t memory_len,
+                        size_t max_input_len,
+                        bool is_return_context_cum_log_probs);
+    void freeBuffer() override;
+
     void initialize();
 
 protected:
     // For stateful processing (interactive generation)
     int step_;
+
+    int *tiled_total_padding_count_ = nullptr;
+
+    T *padded_embedding_kernel_;
+    const T *padded_embedding_kernel_ptr_;
+
+    T *tiled_input_attention_mask_;
+
+    T *decoder_input_buf_;
+    T *decoder_normed_input_buf_ = nullptr;
+    T *decoder_output_buf_;
+    T *normed_decoder_output_buf_;
+    float *logits_buf_;
+    float *nccl_logits_buf_;
+    float *cum_log_probs_;
+    bool *finished_buf_;
+    int *sequence_lengths_ = nullptr;
+    uint32_t *seq_limit_len_ = nullptr;
+    bool *microbatch_should_stop_ = nullptr;
+
+    int *shared_contexts_idx_ = nullptr;
+    T *compact_decoder_features_ = nullptr;
+    int *compact_idx_ = nullptr;
+    int *batch_to_compact_idx_ = nullptr;
+    int *compact_size_ = nullptr;
+
+    T *key_cache_;
+    T *value_cache_;
+    int *cache_indirections_[2] = {nullptr, nullptr};
+
+    int *start_ids_buf_;
+    int *end_ids_buf_;
+
+    int *tiled_input_ids_buf_;
+    int *tiled_input_lengths_buf_;
+
+    // prompt_learning weight_batch ptrs
+    const T **prompt_learning_weight_batch_;
+    int *tiled_prompt_lengths_buf_; // only needed by prefix prompts
+
+    int *transposed_output_ids_buf_;
+    int *output_ids_buf_;
+    int *parent_ids_buf_;
+    bool *tiled_masked_tokens_ = nullptr;
+
+    T *context_decoder_input_buf_;
+    T *context_decoder_normed_input_buf_;
+    T *context_decoder_output_buf_;
+    float *output_log_probs_buf_;
+
+    // The slope per head of an attention linear bias.
+    T *linear_bias_slopes_ = nullptr;
+
+    // buffers dedicated to log prob computation
+    T *lp_normed_decoder_output_buf_ = nullptr;
+    float *lp_logits_buf_ = nullptr;
+    float *lp_nccl_logits_buf_ = nullptr;
+    float *lp_logprob_buf_ = nullptr;
 
 public:
     ParallelGpt(size_t max_batch_size,
@@ -102,7 +169,6 @@ public:
                 AttentionType attention_type = AttentionType::UNFUSED_MHA,
                 bool sparse = false,
                 int int8_mode = 0,
-                // std::shared_ptr<AbstractCustomComm> custom_all_reduce_comm = nullptr,
                 int enable_custom_all_reduce = 0,
                 float shared_contexts_ratio = 1.0f);
 

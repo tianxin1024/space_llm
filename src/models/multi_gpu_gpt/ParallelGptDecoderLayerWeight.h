@@ -23,7 +23,7 @@ struct gptVariantParams {
     bool has_adapters = false;
     size_t adapter_inter_size = 0;
     // Whether to use the attention linear positional bias
-    bool use_attention_linear_positional_bias = false;
+    bool use_attention_linear_bias = false;
 };
 
 template <typename T>
