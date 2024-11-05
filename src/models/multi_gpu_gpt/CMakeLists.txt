@@ -29,6 +29,6 @@ add_library(ParallelGpt STATIC ParallelGpt.cc)
 set_property(TARGET ParallelGpt PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET ParallelGpt PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(ParallelGpt PUBLIC -lcudart ParallelGptDecoder gpt_kernels ParallelGptContextDecoder
-                      preprocess_kernels ParallelGptWeight 
+                      preprocess_kernels ParallelGptWeight memory_utils 
                       cuda_utils logger)
 

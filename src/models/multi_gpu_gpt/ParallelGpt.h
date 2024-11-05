@@ -1,5 +1,6 @@
 #pragma once
 
+#include "utils/memory_utils.h"
 #include "utils/prompt_learning.h"
 #include "layers/BaseLayer.h"
 #include "layers/attention_layers/BaseAttentionLayer.h"

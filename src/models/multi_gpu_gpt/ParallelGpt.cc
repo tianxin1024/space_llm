@@ -637,6 +637,331 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
     //     QK_LOG_INFO("build alibi slopes");
     //     invokeBuildAlibiSlopes(linear_bias_slopes_, head_num_, stream_);
     // }
+
+    // continue_gen == false
+    if (continue_gen) {
+        // QK_LOG_INFO("input tiling and init");
+        // invokeTileGptInputs(tiled_input_ids_buf_,
+        //                     tiled_input_lengths_buf_,
+        //                     input_tensors->at("input_ids").getPtr<int>(),
+        //                     input_tensors->at("input_lengths").getPtr<const int>(),
+        //                     batch_size,
+        //                     beam_width,
+        //                     max_input_length,
+        //                     stream_);
+        // invokePlusScalar(tiled_input_lengths_buf_, initial_step, batch_size * beam_width, stream_);
+        // sync_check_cuda_error();
+        // invokeDecodingInitialize(finished_buf_,
+        //                          sequence_lengths_,
+        //                          nullptr,
+        //                          cum_log_probs_,
+        //                          start_ids_buf_,
+        //                          batch_size,
+        //                          beam_width,
+        //                          initial_step - 1,
+        //                          stream_);
+        // invokeTransposeAxis01(output_ids_buf_ + initial_step * batch_size * beam_width,
+        //                       tiled_input_ids_buf_,
+        //                       batch_size * beam_width,
+        //                       max_input_length,
+        //                       1,
+        //                       stream_);
+    } else {
+        // TODO(bhsueh) Initilaize them in one kernel
+        // initialize the output ids and parent ids
+        QK_LOG_INFO("initialize output and parent ids");
+        cudaMemsetAsync(output_ids_buf_, 0, sizeof(int) * batch_size * beam_width * session_len, stream_);
+        cudaMemsetAsync(parent_ids_buf_, 0, sizeof(int) * batch_size * beam_width * session_len, stream_);
+        cudaMemsetAsync(tiled_masked_tokens_, false, sizeof(bool) * batch_size * beam_width * memory_len, stream_);
+        cudaMemsetAsync(tiled_total_padding_count_, 0, sizeof(int) * batch_size * beam_width, stream_);
+        if (beam_width > 1) {
+            cudaMemsetAsync(cache_indirections_[0], 0, 2 * sizeof(int) * batch_size * beam_width * memory_len, stream_);
+        }
+        sync_check_cuda_error();
+
+        QK_LOG_INFO("padded embedding kernel init");
+        if (vocab_size_ == vocab_size_padded_) {
+            padded_embedding_kernel_ptr_ = gpt_weights->post_decoder_embedding.kernel;
+        } else {
+            cudaAutoCpy(padded_embedding_kernel_,
+                        gpt_weights->post_decoder_embedding.kernel,
+                        vocab_size_ * hidden_units_,
+                        stream_);
+            sync_check_cuda_error();
+        }
+
+        int compact_size;
+        bool use_shared_contexts = (shared_contexts_ratio_ > 0.0f) && (max_input_length >= 1) && (batch_size > 1);
+        QK_LOG_INFO("find context dups");
+        if (use_shared_contexts) {
+            // invokeFindContextDups(shared_contexts_idx_,
+            //                       batch_to_compact_idx_,
+            //                       compact_idx_,
+            //                       compact_size_,
+            //                       input_tensors->at("input_ids").getPtr<int>(),
+            //                       batch_size,
+            //                       beam_width,
+            //                       max_input_length,
+            //                       stream_);
+            // cudaD2Hcpy(&compact_size, compact_size_, 1);
+            // use_shared_contexts = compact_size <= shared_contexts_ratio_ * batch_size;
+            // sync_check_cuda_error();
+        }
+
+        // NOTE: p/prompt-tuning process here (lookup prompt embedding tables by task name ids)
+        // get p/prompt-tuning weight for each batch --> shape [batch, beam_width]
+        // --> ptrs with shape [prompt_len, hidden_size]
+        std::vector<const T *> p_prompt_tuning_batch_ptrs;
+        std::vector<int> p_prompt_tuning_lengths;
+        QK_LOG_INFO("prompt embedding lookup");
+        if (use_loaded_p_prompt_embedding) {
+            for (int bs_id = 0; bs_id < batch_size; ++bs_id) {
+                int task_id = prompt_learning_task_name_ids[bs_id];
+                std::pair<const T *, int> p_prompt_tuning_pair = {};
+                bool valid_task_name_id = task_id < gpt_weights->prompt_learning_table.size();
+                if (valid_task_name_id) {
+                    p_prompt_tuning_pair = gpt_weights->prompt_learning_table.at(task_id);
+                } else {
+                    // don't throw oor in case of model server failing
+                    QK_LOG_ERROR("p_prompt_tuning_weights not found for task id: " + std::to_string(task_id)
+                                 + "\n return with invalid output tensors");
+                    return;
+                }
+                if (input_lengths_h != nullptr) {
+                    if (bs_id == 0) {
+                        max_input_without_prompt_length = input_lengths_h[bs_id] - p_prompt_tuning_pair.second;
+                    } else {
+                        max_input_without_prompt_length =
+                            std::max(size_t(input_lengths_h[bs_id] - p_prompt_tuning_pair.second),
+                                     max_input_without_prompt_length);
+                    }
+                }
+                for (int bw_id = 0; bw_id < beam_width; ++bw_id) {
+                    // only weight ptrs needed here
+                    p_prompt_tuning_batch_ptrs.push_back(p_prompt_tuning_pair.first);
+                    p_prompt_tuning_lengths.push_back(p_prompt_tuning_pair.second);
+                }
+            }
+
+            cudaAutoCpy(
+                prompt_learning_weight_batch_, p_prompt_tuning_batch_ptrs.data(), batch_size * beam_width, stream_);
+
+            cudaAutoCpy(tiled_prompt_lengths_buf_, p_prompt_tuning_lengths.data(), batch_size * beam_width, stream_);
+
+            sync_check_cuda_error();
+        }
+
+        // handle first step
+        if (has_p_prompt_tuning_ || has_prefix_prompt_ || has_prefix_soft_prompt_ || max_input_length > 1) {
+            QK_LOG_INFO("input tiling and init");
+            invokeTileGptPromptInputs(tiled_input_ids_buf_,
+                                      tiled_input_lengths_buf_,
+                                      use_request_p_prompt_embedding ? tiled_prompt_lengths_buf_ : nullptr,
+                                      input_tensors->at("input_ids").getPtr<int>(),
+                                      input_tensors->at("input_lengths").getPtr<const int>(),
+                                      use_request_p_prompt_embedding ?
+                                          input_tensors->at("request_prompt_lengths").getPtr<const int>() :
+                                          nullptr,
+                                      batch_size,
+                                      beam_width,
+                                      max_input_length,
+                                      stream_);
+            sync_check_cuda_error();
+
+            if (has_prefix_soft_prompt_) {
+                QK_LOG_INFO("input id embedding lookup");
+                inputIdsEmbeddingLookupPosEncodingSoftPromptParam<T> param;
+                param.from_tensor = context_decoder_input_buf_;
+                param.output_ids = output_ids_buf_;
+                param.input_lengths = tiled_input_lengths_buf_;
+                param.embedding_table = gpt_weights->pre_decoder_embedding_table;
+                param.pos_table = gpt_weights->position_encoding_table;
+                param.prefix_soft_prompt_embedding = input_tensors->at("request_prompt_embedding").getPtr<float>();
+                param.prefix_soft_prompt_lengths = input_tensors->at("request_prompt_lengths").getPtr<int>();
+                param.input_ids = tiled_input_ids_buf_;
+                param.start_step = 1;
+                param.max_input_length = max_input_length;
+                param.max_prefix_soft_prompt_length = max_prefix_soft_prompt_length;
+                param.batch_size = batch_size;
+                param.beam_width = beam_width;
+                param.hidden_units = hidden_units_;
+                param.stream = stream_;
+
+                invokeInputIdsEmbeddingLookupPosEncodingSoftPrompt(param);
+                sync_check_cuda_error();
+
+                max_input_length += max_prefix_soft_prompt_length; // view soft_prompt as input
+                max_context_len += max_prefix_soft_prompt_length;
+            } else {
+                // NOTE: add prompt embeddings here (for p/prompt tuning)
+                QK_LOG_INFO("input id embedding lookup");
+                pPromptTuningParam<T> prompt_param{
+                    use_loaded_p_prompt_embedding ? prompt_learning_weight_batch_ : (const T **)nullptr,
+                    prompt_learning_start_id_,
+                    max_request_p_prompt_length,
+                    use_request_p_prompt_embedding,
+                    use_request_p_prompt_embedding ? input_tensors->at("request_prompt_embedding").getPtr<T>() :
+                                                     nullptr};
+                invokeInputIdsEmbeddingLookupPosEncoding(context_decoder_input_buf_,
+                                                         output_ids_buf_,
+                                                         gpt_weights->pre_decoder_embedding_table,
+                                                         gpt_weights->position_encoding_table,
+                                                         prompt_param,
+                                                         tiled_input_ids_buf_,
+                                                         1,
+                                                         max_input_length,
+                                                         max_input_length,
+                                                         batch_size * beam_width,
+                                                         hidden_units_,
+                                                         stream_);
+                sync_check_cuda_error();
+            }
+
+            if (gpt_variant_params_.has_pre_decoder_layernorm) {
+                QK_LOG_INFO("pre-decoder layernorm");
+                invokeGeneralLayerNorm(context_decoder_normed_input_buf_,
+                                       context_decoder_input_buf_,
+                                       gpt_weights->pre_decoder_layernorm.gamma,
+                                       gpt_weights->pre_decoder_layernorm.beta,
+                                       layernorm_eps_,
+                                       batch_size * beam_width * max_input_length,
+                                       hidden_units_,
+                                       (float *)nullptr,
+                                       0,
+                                       stream_);
+            }
+            QK_LOG_INFO("build decoder attention mask");
+            invokeBuildDecoderAttentionMask(tiled_input_attention_mask_,
+                                            tiled_input_lengths_buf_,
+                                            nullptr,
+                                            batch_size * beam_width,
+                                            max_input_length,
+                                            0,
+                                            stream_);
+            sync_check_cuda_error();
+
+            TensorMap decoder_input_tensors(
+                {{"decoder_input",
+                  Tensor(MEMORY_GPU,
+                         data_type,
+                         {batch_size * beam_width, (size_t)max_input_length, hidden_units_},
+                         gpt_variant_params_.has_pre_decoder_layernorm ? context_decoder_normed_input_buf_ :
+                                                                         context_decoder_input_buf_)},
+                 {"attention_mask",
+                  Tensor(MEMORY_GPU,
+                         data_type,
+                         {batch_size * beam_width, 1, (size_t)max_input_length, (size_t)max_input_length},
+                         tiled_input_attention_mask_)},
+                 {"input_lengths",
+                  Tensor(MEMORY_GPU, TYPE_INT32, {batch_size * beam_width}, tiled_input_lengths_buf_)}});
+
+            if (use_shared_contexts) {
+                decoder_input_tensors.insert("compact_idx",
+                                             Tensor(MEMORY_GPU, TYPE_INT32, {(size_t)compact_size}, compact_idx_));
+                decoder_input_tensors.insert(
+                    "batch_to_compact_idx",
+                    Tensor(MEMORY_GPU, TYPE_INT32, {batch_size * beam_width}, batch_to_compact_idx_));
+            }
+            if (gpt_variant_params_.use_attention_linear_bias) {
+                decoder_input_tensors.insert("linear_bias_slopes",
+                                             Tensor(MEMORY_GPU,
+                                                    data_type,
+                                                    {local_head_num_},
+                                                    linear_bias_slopes_ + local_head_num_));
+            }
+
+            TensorMap decoder_output_tensors(
+                {{"decoder_output",
+                  Tensor(MEMORY_GPU,
+                         data_type,
+                         {batch_size * beam_width, (size_t)max_input_length, hidden_units_},
+                         context_decoder_output_buf_)},
+                 {"key_cache", Tensor(MEMORY_GPU, data_type, self_k_cache_shape, key_cache_)},
+                 {"value_cache", Tensor(MEMORY_GPU, data_type, self_v_cache_shape, value_cache_)},
+                 {"last_token_hidden_units",
+                  Tensor(MEMORY_GPU, data_type, {batch_size * beam_width, hidden_units_}, decoder_output_buf_)}});
+
+            gpt_context_decoder_->forward(
+                &decoder_output_tensors, &decoder_input_tensors, &gpt_weights->decoder_layer_weights);
+
+            if (is_return_context_embeddings) {
+                QK_LOG_INFO("context embedding sum length dim");
+                invokeSumLengthDimension(output_tensors->at("context_embeddings").getPtr<float>(),
+                                         context_decoder_output_buf_,
+                                         batch_size * beam_width,
+                                         max_input_length,
+                                         hidden_units_,
+                                         stream_);
+            }
+
+            QK_LOG_INFO("decoding init");
+            // invokeDecodingInitialize(finished_buf_,
+            //                          sequence_lengths_,
+            //                          nullptr,
+            //                          cum_log_probs_,
+            //                          start_ids_buf_,
+            //                          batch_size,
+            //                          beam_width,
+            //                          max_input_length - 1,
+            //                          stream_);
+
+            if (is_return_context_cum_log_probs) {
+                QK_LOG_INFO("compute context cumulative log probs");
+                // computeContextCumLogProbs(cum_log_probs_,
+                //                           context_decoder_output_buf_,
+                //                           tiled_input_ids_buf_,
+                //                           tiled_input_lengths_buf_,
+                //                           batch_size,
+                //                           beam_width,
+                //                           (size_t)max_input_length,
+                //                           gpt_weights);
+            }
+            sync_check_cuda_error();
+        } else if (max_input_length == 0) {
+            QK_CHECK(prompt_learning_type_ == PromptLearningType::no_prompt
+                     && request_prompt_type == PromptLearningType::no_prompt);
+            max_input_length++;
+            QK_LOG_INFO("decoding init");
+            // invokeDecodingInitialize(finished_buf_,
+            //                          sequence_lengths_,
+            //                          output_ids_buf_,
+            //                          cum_log_probs_,
+            //                          start_ids_buf_,
+            //                          batch_size,
+            //                          beam_width,
+            //                          max_input_length - 1,
+            //                          stream_);
+            std::vector<int> h_input_lengths(batch_size * beam_width, 1);
+            cudaAutoCpy(tiled_input_lengths_buf_, h_input_lengths.data(), batch_size * beam_width, stream_);
+            sync_check_cuda_error();
+        } else if (max_input_length == 1) {
+            QK_CHECK(prompt_learning_type_ == PromptLearningType::no_prompt
+                     && request_prompt_type == PromptLearningType::no_prompt);
+            QK_LOG_INFO("decoding init");
+            // invokeDecodingInitialize(finished_buf_,
+            //                          sequence_lengths_,
+            //                          nullptr,
+            //                          cum_log_probs_,
+            //                          start_ids_buf_,
+            //                          batch_size,
+            //                          beam_width,
+            //                          max_input_length - 1,
+            //                          stream_);
+            sync_check_cuda_error();
+            QK_LOG_INFO("input tiling and init");
+            invokeTileGptInputs(tiled_input_ids_buf_,
+                                tiled_input_lengths_buf_,
+                                input_tensors->at("input_ids").getPtr<int>(),
+                                input_tensors->at("input_lengths").getPtr<int>(),
+                                batch_size,
+                                beam_width,
+                                max_input_length,
+                                stream_);
+            sync_check_cuda_error();
+
+            cudaAutoCpy(output_ids_buf_, tiled_input_ids_buf_, batch_size * beam_width, stream_);
+        }
+    }
 }
 
 template class ParallelGpt<float>;

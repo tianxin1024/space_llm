@@ -175,6 +175,17 @@ template void cudaAutoCpy(uint *tgt, const uint *src, size_t size, cudaStream_t 
 template void cudaAutoCpy(unsigned long long *tgt, const unsigned long long *src, size_t size, cudaStream_t stream);
 template void cudaAutoCpy(char *tgt, const char *src, size_t size, cudaStream_t stream);
 
+template void cudaAutoCpy(float const **tgt, float const *const *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(half const **tgt, half const *const *src, size_t size, cudaStream_t stream);
+#ifdef ENABLE_BF16
+template void cudaAutoCpy(__nv_bfloat16 const **tgt, __nv_bfloat16 const *const *src, size_t size, cudaStream_t stream);
+#endif
+template void cudaAutoCpy(int const **tgt, int const *const *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(bool const **tgt, bool const *const *src, size_t size, cudaStream_t stream);
+template void cudaAutoCpy(int8_t const **tgt, int8_t const *const *src, size_t size, cudaStream_t stream);
+template void
+cudaAutoCpy(unsigned long long const **tgt, unsigned long long const *const *src, size_t size, cudaStream_t stream);
+
 // loads data from binary file. If it succeeds, returns a non-empty vector. If loading fails or
 // the product of the elements in shape is 0, this function will return an empty vector.
 template <typename T>
