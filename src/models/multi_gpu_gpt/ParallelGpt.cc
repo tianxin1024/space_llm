@@ -1,4 +1,5 @@
 #include "models/multi_gpu_gpt/ParallelGpt.h"
+#include "kernels/gpt_kernels.h"
 
 namespace space_llm {
 
@@ -344,6 +345,298 @@ ParallelGpt<T>::~ParallelGpt() {
     delete gpt_context_decoder_;
     // delete dynamic_decode_layer_;
     freeBuffer();
+}
+
+template <typename T>
+void ParallelGpt<T>::forward(std::vector<Tensor> *output_tensors,
+                             const std::vector<Tensor> *input_tensors,
+                             const ParallelGptWeight<T> *gpt_weights) {
+    // input_tensors:
+    //      input_ids [batch_size, max_input_length]
+    //      input_lengths [batch_size]
+    //      max_output_seq_len [1] on cpu
+
+    // output_tensors:
+    //      output_ids [batch_size, beam, max_output_seq_len]
+    //      sequence_length [batch_size, beam]
+    //      output_log_probs [batch_size, beam, request_output_seq_len], must be float*.
+    //          It leads to additional computing cost. If we don't need this result, please put nullptr
+    //      cum_log_probs [batch_size, beam], must be float*, optional
+    //          The cumulative log probability of generated sequences. It leads additional computing cost.
+
+    // Step is from max_input_length ~ max_output_seq_len,
+    // When step = k,  we put output ids and caches at step k, and the sequence_length would be k - 1 before
+    // complete this step.
+    // When there is no input_ids, put the start token at step 0 of output_ids_buf_. After forward, only copy
+    // the step 1 ~ max_output_seq_len of output_ids_buf_ to output_tensors->at(0).data
+
+    std::unordered_map<std::string, Tensor> input_tensors_map{{"input_ids", input_tensors->at(0)},
+                                                              {"input_lengths", input_tensors->at(1)},
+                                                              {"max_output_seq_len", input_tensors->at(2)}};
+    input_tensors_map.insert({"random_seed", {MEMORY_CPU, TYPE_INT32, {1}, &random_seed_}});
+    input_tensors_map.insert({"runtime_top_k", {MEMORY_CPU, TYPE_UINT32, {1}, &top_k_}});
+    input_tensors_map.insert({"runtime_top_p", {MEMORY_CPU, TYPE_FP32, {1}, &top_p_}});
+
+    std::unordered_map<std::string, Tensor> output_tensors_map{{"output_ids", output_tensors->at(0)},
+                                                               {"sequence_length", output_tensors->at(1)},
+                                                               {"output_log_probs", output_tensors->at(2)}};
+
+    if (output_tensors->size() > 3) {
+        output_tensors_map.insert({"cum_log_probs", output_tensors->at(4)});
+    }
+
+    forward(&output_tensors_map, &input_tensors_map, gpt_weights);
+}
+
+template <typename T>
+void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
+                             const std::unordered_map<std::string, Tensor> *input_tensors,
+                             const ParallelGptWeight<T> *gpt_weights) {
+    // input_tensors:
+    //      input_ids [batch_size, max_input_length]
+    //      input_lengths [batch_size]
+    //      input_lengths_h [batch_size] on cpu, optional
+    //      prompt_learning_task_name_ids [batch_size] on cpu
+    //      output_seq_len [batch_size] on cpu
+    //      stop_words_list [batch_size, 2, stop_words_length], optional
+    //      bad_words_list [2, bad_words_length] or [batch_size, 2, bad_words_length], optional
+    //      start_id [batch_size] on cpu, optional
+    //      end_id [batch_size] on cpu, optional
+    //      runtime_top_k [1] or [batch_size] on cpu, optional, uint.
+    //      runtime_top_p [1] or [batch_size] on cpu, optional, float.
+    //      beam_search_diversity_rate [1] or [batch_size] on cpu, optional, float.
+    //      temperature [1] or [batch_size] on cpu, optional, float.
+    //      len_penalty [1] or [batch_size] on cpu, optional, float.
+    //      repetition_penalty [1] or [batch_size] on cpu, optional, float.
+    //      presence_penalty [1] or [batch_size] on cpu, optional, float.
+    //          Only one of repetition and presence penalties is allowed.
+    //      min_length [1] or [batch_size] on cpu, optional, int
+    //      random_seed [1] or [batch_size] on cpu, optional, unsigned long long int.
+    //      request_prompt_lengths [batch_size], optional
+    //      request_prompt_lengths_h [batch_size], cpu, optional
+    //      request_prompt_embedding [batch_size, max_prompt_length, hidden_units], float, optional
+    //      request_prompt_type [batch_size], int, optional
+    //      is_return_context_cum_log_probs [1] on cpu, bool, optional
+    //      session_len [1] on cpu, uint32, optional
+    //      memory_len [1] on cpu, uint32, optional
+    //      continue_gen [1] on cpu, bool, optional
+    //      is_return_context_embeddings [1] on cpu, bool, optional
+    //      top_p_decay [batch_size] on gpu, float, optional
+    //      top_p_min [batch_size] on gpu, float, optional
+    //      top_p_reset_ids [batch_size] on gpu, uint32, optional
+
+    // output_tensors:
+    //      output_ids [batch_size, beam_width, max_output_seq_len]
+    //      sequence_length [batch_size, beam_width]
+    //      response_input_lengths [batch_size, beam_width], optional
+    //      output_log_probs [batch_size, beam_width, request_output_seq_len], must be float*.
+    //          optional. It leads to additional computing cost. If we don't need this result, don't put it.
+    //      cum_log_probs [batch_size, beam_width], must be float*. optional.
+    //          The cumulative log probability of generated sequences. It may lead to additional computing cost.
+    //      context_embeddings [batch_size, hidden_units], must be float*, optional
+
+    // Step is from max_input_length ~ max_output_seq_len,
+    // When step = k,  we put output ids and caches at step k, and the sequence_length would be k - 1 before
+    // complete this step.
+    // When there is no input_ids, put the start token at step 0 of output_ids_buf_. After forward, only copy
+    // the step 1 ~ max_output_seq_len of output_ids_buf_ to output_tensors->at(0).data
+
+    QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
+    QK_CHECK_WITH_INFO(input_tensors->size() >= 3, "input_tensors->size() >= 3");
+    QK_CHECK_WITH_INFO(output_tensors->size() >= 2, "output_tensors->size() >= 2");
+    QK_CHECK(input_tensors->at("input_ids").shape.size() == 2);
+    QK_CHECK(input_tensors->at("input_lengths").shape.size() == 1);
+    QK_CHECK(input_tensors->find("output_seq_len") != input_tensors->end()
+             && input_tensors->at("output_seq_len").shape.size() == 1);
+    QK_CHECK(output_tensors->at("output_ids").shape.size() == 3);
+    QK_CHECK(output_tensors->at("sequence_length").shape.size() == 2);
+    QK_CHECK_WITH_INFO(input_tensors->at("input_ids").shape[0] == output_tensors->at("output_ids").shape[0],
+                       "input_tensors->at(\"input_ids\").shape[0] == output_tensors->at(\"output_ids\").shape[0]");
+
+    // Used when inputs do not contain random_seed
+    const size_t batch_size = output_tensors->at("output_ids").shape[0];
+    const size_t beam_width = output_tensors->at("output_ids").shape[1];
+
+    QK_CHECK_WITH_INFO(output_tensors->count("cum_log_probs") == 0
+                           || output_tensors->at("cum_log_probs").size() == batch_size * beam_width,
+                       "The shape of cum_log_probs should match with batch_size x beam_width if provided.");
+
+    int max_input_length = input_tensors->at("input_ids").shape[1];
+    bool continue_gen = input_tensors->find("continue_gen") != input_tensors->end() ?
+                            input_tensors->at("continue_gen").getVal<bool>() :
+                            false;
+
+    const bool is_return_context_embeddings =
+        input_tensors->find("is_return_context_embeddings") != input_tensors->end() && input_tensors->at("is_return_context_embeddings").getVal<bool>();
+    if (is_return_context_embeddings) {
+        QK_CHECK_WITH_INFO(output_tensors->find("context_embeddings") != output_tensors->end(),
+                           "When requesting context embeddings, a context embeddings output tensors must be provided");
+    }
+
+    const int initial_step = continue_gen ? step_ : 0;
+    int max_context_len = max_input_length + initial_step;
+
+    // NOTE: the input already contains the p/prompt-tunning tokens ids for p/prompt tuning task
+    // prompt_learning_task_name_ids are used by both p/prompt-tunning and prefix_prompt task
+    const int *prompt_learning_task_name_ids =
+        input_tensors->count("prompt_learning_task_name_ids") ?
+            input_tensors->at("prompt_learning_task_name_ids").getPtr<const int>() :
+            nullptr;
+
+    QK_CHECK_WITH_INFO(
+        !(prompt_learning_task_name_ids != nullptr
+          && (prompt_learning_type_ == PromptLearningType::no_prompt
+              || prompt_learning_type_ == PromptLearningType::soft_prompt)),
+        "prompt_learning_type is prefix_prompt either p_prompt_tuning when prompt_learning_task_name_ids are provided.");
+
+    PromptLearningType request_prompt_type = PromptLearningType::no_prompt;
+    int valid_prompt_inputs = input_tensors->count("request_prompt_type")
+                              + input_tensors->count("request_prompt_lengths")
+                              + input_tensors->count("request_prompt_embedding");
+
+    if (valid_prompt_inputs == 3) {
+        request_prompt_type = static_cast<PromptLearningType>(input_tensors->at("request_prompt_type").getVal<int>());
+        if (prompt_learning_task_name_ids != nullptr) {
+            QK_LOG_INFO("Apply prompt embedding from input, will ignore task name ids");
+        }
+    } else if (valid_prompt_inputs > 0) {
+        QK_LOG_WARNING(
+            "Prompts not applied: request_prompt_embedding, request_prompt_lengths, request_prompt_type are all needed!");
+    }
+    if (request_prompt_type == PromptLearningType::prefix_prompt) {
+        QK_LOG_WARNING("Request prompt doesn't support prefix prompt currently!");
+    }
+
+    // whether or not use prompt embeddings from the request.
+    // If true, staticlly loaded prompts weights during model loading and task name ids will be ignored
+    bool use_request_p_prompt_embedding = request_prompt_type == PromptLearningType::p_prompt_tuning;
+    int max_request_p_prompt_length =
+        use_request_p_prompt_embedding ? input_tensors->at("request_prompt_embedding").shape[1] : 0;
+    // p_prompt tuning: input and prompt are concatnenated (not separate),
+    const uint32_t *input_lengths_h = input_tensors->count("input_lengths_h") ?
+                                          input_tensors->at("input_lengths_h").getPtr<const uint32_t>() :
+                                          nullptr;
+
+    size_t max_input_without_prompt_length = max_context_len;
+    if (use_request_p_prompt_embedding && input_lengths_h != nullptr
+        && input_tensors->count("request_prompt_lengths_h")) {
+        const uint32_t *request_prompt_lengths_h =
+            input_tensors->at("request_prompt_lengths_h").getPtr<const uint32_t>();
+        max_input_without_prompt_length = input_lengths_h[0] - request_prompt_lengths_h[0];
+        for (int bs_id = 1; bs_id < batch_size; ++bs_id) {
+            max_input_without_prompt_length = std::max(size_t(input_lengths_h[bs_id] - request_prompt_lengths_h[bs_id]),
+                                                       max_input_without_prompt_length);
+        }
+    }
+
+    has_prefix_prompt_ =
+        (prompt_learning_task_name_ids != nullptr && prompt_learning_type_ == PromptLearningType::prefix_prompt);
+    has_p_prompt_tuning_ =
+        prompt_learning_task_name_ids != nullptr && prompt_learning_type_ == PromptLearningType::p_prompt_tuning
+        || use_request_p_prompt_embedding;
+    bool use_loaded_p_prompt_embedding = has_p_prompt_tuning_ && !use_request_p_prompt_embedding;
+    has_prefix_soft_prompt_ = request_prompt_type == PromptLearningType::soft_prompt;
+
+    // NOTE: soft prompt
+    QK_CHECK_WITH_INFO(!(has_prefix_soft_prompt_ && continue_gen),
+                       "Interactive Generations cannot work with prefix_soft_prompt !");
+    const size_t max_prefix_soft_prompt_length =
+        has_prefix_soft_prompt_ ? input_tensors->at("request_prompt_embedding").shape[1] : 0;
+    const size_t limit_len_offset = max_prefix_soft_prompt_length + (max_input_length == 0 ? 1 : 0);
+    const size_t gen_len = input_tensors->at("output_seq_len").max<uint32_t>() + limit_len_offset;
+
+    size_t session_len = 0;
+    if (continue_gen) {
+        session_len = session_len_; // Record the size of allocated buffer in previous round.
+    } else if (input_tensors->find("session_len") != input_tensors->end()) {
+        session_len = input_tensors->at("session_len").getVal<uint32_t>(); // Use for allocate buffer in first round.
+    } else {
+        session_len = gen_len; // When the interactive generation mode is disabled.
+    }
+    session_len_ = session_len;
+    QK_CHECK_WITH_INFO(
+        gen_len + initial_step <= session_len,
+        fmtstr("Session size too low (%d) vs. total output size (%d)", session_len, gen_len + initial_step));
+    size_t memory_len = 0;
+    if (continue_gen) {
+        memory_len = memory_len_; // Record the size of allocated buffer in previous round.
+    } else if (input_tensors->find("memory_len") != input_tensors->end()) {
+        memory_len = input_tensors->at("memory_len").getVal<uint32_t>(); // Use for allocate buffer in first round.
+    } else {
+        memory_len = session_len; // When the interactive generation mode is disabled.
+    }
+    memory_len_ = memory_len;
+    /* TODO: could remove this constraint by changing how context decoder operates */
+    QK_CHECK_WITH_INFO(max_input_length <= memory_len,
+                       fmtstr("Memory size too low (%d) vs. input length (%d)", memory_len, max_input_length));
+
+    if (memory_len < session_len) {
+        QK_LOG_WARNING("memory_len (%d) is less than session_len (%d). "
+                       "Note that this reduces the memory cost of k/v cache, but may hurt the accuracy.",
+                       memory_len,
+                       session_len);
+    } else if (memory_len > session_len) {
+        QK_LOG_WARNING("memory_len (%d) is larger than session_len (%d). "
+                       "This may lead to additional memory cost. Suggest to use smaller memory_len.",
+                       memory_len,
+                       session_len);
+    }
+
+    if (gpt_variant_params_.has_positional_encoding && session_len_ > gpt_weights->getMaxSeqLen()) {
+        QK_LOG_ERROR("The session_len_ (%d) of request is longer than max_seq_len (%d) of embedding table."
+                     " This is a invalid input. Setting the session_len_ to %d.",
+                     session_len_,
+                     gpt_weights->getMaxSeqLen(),
+                     gpt_weights->getMaxSeqLen());
+        session_len_ = gpt_weights->getMaxSeqLen();
+    }
+
+    const bool is_return_context_cum_log_probs = input_tensors->count("is_return_context_cum_log_probs") > 0
+                                                 && input_tensors->at("is_return_context_cum_log_probs").getVal<bool>();
+    if (is_return_context_cum_log_probs) {
+        QK_CHECK_WITH_INFO(output_tensors->count("cum_log_probs")
+                               && output_tensors->at("cum_log_probs").data != nullptr,
+                           "`cum_log_probs` must be provided in `output_tensors` in order to enable "
+                           "the cumulative log probability computation of input contexts.");
+    }
+
+    QK_LOG_INFO("buffer allocation");
+    if (!continue_gen) {
+        allocateBuffer(batch_size,
+                       beam_width,
+                       session_len,
+                       memory_len,
+                       max_input_length + max_prefix_soft_prompt_length,
+                       is_return_context_cum_log_probs);
+        sync_check_cuda_error();
+    }
+    setSeqLimitLen(seq_limit_len_, input_tensors->at("output_seq_len"), limit_len_offset, batch_size);
+
+    const DataType data_type = getTensorType<T>();
+    const cudaDataType_t gemm_data_type = getCudaDataType<T>();
+
+    const std::vector<size_t> self_k_cache_shape = {num_layer_,
+                                                    batch_size * beam_width,
+                                                    local_head_num_,
+                                                    size_per_head_ / (16 / sizeof(T)),
+                                                    memory_len,
+                                                    16 / sizeof(T)};
+    const std::vector<size_t> self_v_cache_shape = {
+        num_layer_, batch_size * beam_width, local_head_num_, memory_len, size_per_head_};
+
+    // {
+    //     TensorMap input_map(*input_tensors);
+
+    //     QK_LOG_INFO("dynamic decode setup");
+    //     dynamic_decode_layer_->setup(batch_size, beam_width, &input_map);
+    //     handleOptArg(&input_map, "start_id", start_ids_buf_, start_id_, batch_size);
+    //     handleOptArg(&input_map, "end_id", end_ids_buf_, end_id_, batch_size);
+    // }
+
+    // if (gpt_variant_params_.use_attention_linear_bias) {
+    //     QK_LOG_INFO("build alibi slopes");
+    //     invokeBuildAlibiSlopes(linear_bias_slopes_, head_num_, stream_);
+    // }
 }
 
 template class ParallelGpt<float>;

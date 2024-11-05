@@ -254,4 +254,83 @@ void gpt_example(const INIReader reader) {
                                         0,
                                         0,
                                         shared_contexts_ratio);
+
+    int *d_output_ids;
+    int *d_sequence_lengths;
+    deviceMalloc(&d_output_ids, request_batch_size * beam_width * total_output_len, false);
+    deviceMalloc(&d_sequence_lengths, request_batch_size * beam_width, false);
+    std::vector<uint32_t> output_seq_len(request_batch_size, total_output_len);
+
+    std::unordered_map<std::string, Tensor> input_tensors = std::unordered_map<std::string, Tensor>{
+        {"input_ids",
+         Tensor{MEMORY_GPU, TYPE_INT32, std::vector<size_t>{request_batch_size, (size_t)max_input_len}, d_input_ids}},
+        {"input_lengths", Tensor{MEMORY_GPU, TYPE_INT32, std::vector<size_t>{request_batch_size}, d_input_lengths}},
+        {"output_seq_len",
+         Tensor{MEMORY_CPU, TYPE_UINT32, std::vector<size_t>{request_batch_size}, output_seq_len.data()}},
+        {"temperature", Tensor{MEMORY_CPU, TYPE_FP32, std::vector<size_t>{1}, &temperature}},
+        {"len_penalty", Tensor{MEMORY_CPU, TYPE_FP32, std::vector<size_t>{1}, &len_penalty}},
+        {"min_length", Tensor{MEMORY_CPU, TYPE_INT32, std::vector<size_t>{1}, &min_length}}};
+
+    if (repetition_penalty != 1.0f) {
+        input_tensors.insert(
+            {"repetition_penalty", Tensor{MEMORY_CPU, TYPE_FP32, std::vector<size_t>{1}, &repetition_penalty}});
+    }
+    if (presence_penalty != 0.0f) {
+        input_tensors.insert(
+            {"presence_penalty", Tensor{MEMORY_CPU, TYPE_FP32, std::vector<size_t>{1}, &presence_penalty}});
+    }
+    if (top_k == 0 && top_p == 0.0f) {
+        QK_CHECK(beam_width > 1);
+        input_tensors.insert({"beam_search_diversity_rate",
+                              Tensor{MEMORY_CPU, TYPE_FP32, std::vector<size_t>{1}, &beam_search_diversity_rate}});
+    } else {
+        input_tensors.insert({"random_seed", Tensor{MEMORY_CPU, TYPE_UINT64, std::vector<size_t>{1}, &random_seed}});
+        if (top_p != 0.0f) {
+            input_tensors.insert({"runtime_top_p", Tensor{MEMORY_CPU, TYPE_FP32, std::vector<size_t>{1}, &top_p}});
+        }
+        if (top_k != 0) {
+            input_tensors.insert({"runtime_top_k", Tensor{MEMORY_CPU, TYPE_UINT32, std::vector<size_t>{1}, &top_k}});
+        }
+    }
+
+    std::unordered_map<std::string, Tensor> output_tensors = std::unordered_map<std::string, Tensor>{
+        {"output_ids",
+         Tensor{MEMORY_GPU,
+                TYPE_INT32,
+                std::vector<size_t>{request_batch_size, beam_width, (size_t)total_output_len},
+                d_output_ids}},
+        {"sequence_length",
+         Tensor{MEMORY_GPU, TYPE_INT32, std::vector<size_t>{request_batch_size, beam_width}, d_sequence_lengths}}};
+
+    float *output_log_probs = nullptr;
+    float *d_cum_log_probs = nullptr;
+    if (is_return_log_probs) {
+        deviceMalloc(&output_log_probs, request_batch_size * beam_width * request_output_len);
+        output_tensors.insert({"output_log_probs",
+                               Tensor{MEMORY_GPU,
+                                      TYPE_FP32,
+                                      std::vector<size_t>{request_batch_size, beam_width, (size_t)request_output_len},
+                                      output_log_probs}});
+        deviceMalloc(&d_cum_log_probs, request_batch_size * beam_width);
+        output_tensors.insert(
+            {"cum_log_probs",
+             Tensor{MEMORY_GPU, TYPE_FP32, std::vector<size_t>{request_batch_size, beam_width}, d_cum_log_probs}});
+        input_tensors.insert({"is_return_context_cum_log_probs",
+                              Tensor{MEMORY_CPU, TYPE_BOOL, std::vector<size_t>{1}, &is_return_context_cum_log_probs}});
+    }
+
+    print_mem_usage();
+    int ite = 1;
+    cudaDeviceSynchronize();
+
+    cudaProfilerStart();
+    // warm up
+    ite = 1;
+    QK_LOG_INFO("warmup time");
+    for (int i = 0; i < ite; ++i) {
+        gpt.forward(&output_tensors, &input_tensors, &gpt_weights);
+    }
+    cudaDeviceSynchronize();
+
+    printf("-----------------------\n");
 }

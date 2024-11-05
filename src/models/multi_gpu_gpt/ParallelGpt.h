@@ -77,6 +77,8 @@ private:
 protected:
     // For stateful processing (interactive generation)
     int step_;
+    size_t session_len_;
+    size_t memory_len_;
 
     int *tiled_total_padding_count_ = nullptr;
 
@@ -178,6 +180,10 @@ public:
 
     void forward(std::vector<Tensor> *output_tensors,
                  const std::vector<Tensor> *input_tensors,
+                 const ParallelGptWeight<T> *gpt_weights);
+
+    void forward(std::unordered_map<std::string, Tensor> *output_tensors,
+                 const std::unordered_map<std::string, Tensor> *input_tensors,
                  const ParallelGptWeight<T> *gpt_weights);
 };
 
