@@ -963,6 +963,403 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
             cudaAutoCpy(output_ids_buf_, tiled_input_ids_buf_, batch_size * beam_width, stream_);
         }
     }
+
+    QK_LOG_INFO("mask padding tokens");
+    invokeMaskPaddingTokens(tiled_masked_tokens_,
+                            input_tensors->at("input_lengths").getPtr<int>(),
+                            memory_len,
+                            max_input_length,
+                            initial_step,
+                            batch_size,
+                            beam_width,
+                            stream_);
+
+    // If continue, we restart from initial_step because last token hasn't been processed in decoder
+    const int step_start = continue_gen ? initial_step : max_input_length;
+
+    const size_t local_batch_size = batch_size;
+    QK_CHECK(batch_size % local_batch_size == 0);
+    const size_t iteration_num = batch_size / local_batch_size;
+    for (int microbatch = 0; microbatch < iteration_num; ++microbatch) {
+        microbatch_should_stop_[microbatch] = false;
+    }
+
+    for (step_ = step_start; step_ < (int)gen_len; step_++) {
+        // Loop body produces Nth token by embedding && encoding token (N-1)
+        // if necessary.
+        const bool fill_caches_only = continue_gen && (step_ < max_context_len);
+        const int src_indir_idx = (step_ - step_start) % 2;
+        const int tgt_indir_idx = 1 - src_indir_idx;
+
+        bool generation_should_stop = !fill_caches_only;
+
+        QK_LOG_INFO(fmtstr("token_%d", step_ - step_start));
+        for (uint ite = 0; ite < iteration_num; ++ite) {
+            // skip the finished microbatch in previous steps
+            if (microbatch_should_stop_[ite]) {
+                continue;
+            }
+            const int id_offset = ite * local_batch_size * beam_width;
+            const int hidden_units_offset = id_offset * hidden_units_;
+            const int vocab_size_units_offset = id_offset * vocab_size_padded_;
+
+            // Rank 0~N-1 needs to update the buffer by the results of last rank when the pipeline parallelism is
+            // enabled (pipeline_para_.world_size_ > 1). And if step_ == step_start, then this is the first step and
+            // these buffers are initialized by context directly.
+            // if (step_ != step_start && pipeline_para_.rank_ != pipeline_para_.world_size_ - 1
+            //     && pipeline_para_.world_size_ > 1) {
+            //     ftNcclGroupStart();
+            //     // receive updated sequence_length_ from last rank
+            //     ftNcclRecv(sequence_lengths_ + id_offset,
+            //                local_batch_size * beam_width,
+            //                pipeline_para_.world_size_ - 1,
+            //                pipeline_para_,
+            //                stream_);
+
+            //     // receive updated microbatch_should_stop_ from last rank
+            //     ftNcclRecv(microbatch_should_stop_ + ite, 1, pipeline_para_.world_size_ - 1, pipeline_para_, stream_);
+            //     generation_should_stop &= microbatch_should_stop_[ite];
+
+            //     // receive updated cache_indirections from last rank
+            //     if (beam_width > 1) {
+            //         ftNcclRecv(cache_indirections_[tgt_indir_idx] + id_offset * memory_len,
+            //                    local_batch_size * beam_width * memory_len,
+            //                    pipeline_para_.world_size_ - 1,
+            //                    pipeline_para_,
+            //                    stream_);
+            //     }
+
+            //     // for ids of next step, only first rank needs to receive updated ids
+            //     if (pipeline_para_.rank_ == 0) {
+            //         ftNcclRecv(output_ids_buf_ + (step_ - 1) * batch_size * beam_width + id_offset,
+            //                    local_batch_size * beam_width,
+            //                    pipeline_para_.world_size_ - 1,
+            //                    pipeline_para_,
+            //                    stream_);
+            //     }
+
+            //     ftNcclGroupEnd();
+            //     // throw errors when detected
+            //     ftNcclStreamSynchronize(tensor_para_, pipeline_para_, stream_);
+            //     sync_check_cuda_error();
+            // }
+            // skip the microbatch for last step, which is updated by last rank
+            if (microbatch_should_stop_[ite]) {
+                continue;
+            }
+
+            if ((max_input_length <= 1) || (step_ > step_start) || continue_gen) {
+                if (1) {
+                    invokeEmbeddingLookupPosEncodingPadCount(decoder_input_buf_ + hidden_units_offset,
+                                                             gpt_weights->pre_decoder_embedding_table,
+                                                             gpt_weights->position_encoding_table,
+                                                             output_ids_buf_ + id_offset,
+                                                             tiled_total_padding_count_ + id_offset,
+                                                             local_batch_size * beam_width,
+                                                             hidden_units_,
+                                                             (T)(1.0f),
+                                                             step_ - 1,
+                                                             batch_size * beam_width,
+                                                             0,
+                                                             stream_);
+                    sync_check_cuda_error();
+
+                    if (gpt_variant_params_.has_pre_decoder_layernorm) {
+                        invokeGeneralLayerNorm(decoder_normed_input_buf_ + hidden_units_offset,
+                                               decoder_input_buf_ + hidden_units_offset,
+                                               gpt_weights->pre_decoder_layernorm.gamma,
+                                               gpt_weights->pre_decoder_layernorm.beta,
+                                               layernorm_eps_,
+                                               batch_size * beam_width,
+                                               hidden_units_,
+                                               (float *)nullptr,
+                                               0,
+                                               stream_);
+                    }
+                    sync_check_cuda_error();
+                }
+
+                std::unordered_map<std::string, Tensor> decoder_input_tensors(
+                    {{"decoder_input",
+                      Tensor(MEMORY_GPU,
+                             data_type,
+                             {local_batch_size * beam_width, hidden_units_},
+                             gpt_variant_params_.has_pre_decoder_layernorm ?
+                                 decoder_normed_input_buf_ + hidden_units_offset :
+                                 decoder_input_buf_ + hidden_units_offset)},
+                     {"finished",
+                      Tensor(MEMORY_GPU, TYPE_BOOL, {local_batch_size * beam_width}, finished_buf_ + id_offset)},
+                     {"input_lengths",
+                      Tensor(MEMORY_GPU, TYPE_INT32, {local_batch_size * beam_width}, sequence_lengths_ + id_offset)},
+                     {"total_padding_tokens",
+                      Tensor(MEMORY_GPU,
+                             TYPE_INT32,
+                             {local_batch_size * beam_width},
+                             tiled_total_padding_count_ + id_offset)},
+                     {"max_input_length", Tensor(MEMORY_CPU, TYPE_INT32, {1}, &max_context_len)},
+                     {"step", Tensor(MEMORY_CPU, TYPE_INT32, {1}, &step_)},
+                     {"ite", Tensor(MEMORY_CPU, TYPE_INT32, {1}, &ite)},
+                     {"masked_tokens",
+                      Tensor(MEMORY_GPU,
+                             TYPE_BOOL,
+                             {local_batch_size * beam_width, memory_len},
+                             tiled_masked_tokens_ + id_offset * memory_len)}});
+                if (beam_width > 1) {
+                    decoder_input_tensors.insert({"cache_indirection",
+                                                  Tensor(MEMORY_GPU,
+                                                         TYPE_INT32,
+                                                         {local_batch_size, beam_width, memory_len},
+                                                         cache_indirections_[src_indir_idx] + id_offset * memory_len)});
+                }
+
+                if (gpt_variant_params_.use_attention_linear_bias) {
+                    decoder_input_tensors.insert({"linear_bias_slopes",
+                                                  Tensor(MEMORY_GPU,
+                                                         data_type,
+                                                         {local_head_num_},
+                                                         linear_bias_slopes_ + local_head_num_)});
+                }
+
+                std::unordered_map<std::string, Tensor> decoder_output_tensors(
+                    {{"decoder_output",
+                      Tensor(MEMORY_GPU,
+                             data_type,
+                             {local_batch_size * beam_width, hidden_units_},
+                             decoder_output_buf_ + hidden_units_offset)},
+                     {"key_cache", Tensor(MEMORY_GPU, data_type, self_k_cache_shape, key_cache_)},
+                     {"value_cache", Tensor(MEMORY_GPU, data_type, self_v_cache_shape, value_cache_)}});
+
+                gpt_decoder_->forward(
+                    &decoder_output_tensors, &decoder_input_tensors, &gpt_weights->decoder_layer_weights);
+            }
+
+            if (!fill_caches_only) {
+                // OPT
+                QK_LOG_INFO("Token Final Layer Norm");
+                T *decoder_output_final_buf =
+                    gpt_variant_params_.has_post_decoder_layernorm ? normed_decoder_output_buf_ : decoder_output_buf_;
+                if (gpt_variant_params_.has_post_decoder_layernorm) {
+                    invokeGeneralLayerNorm(normed_decoder_output_buf_ + hidden_units_offset,
+                                           decoder_output_buf_ + hidden_units_offset,
+                                           gpt_weights->post_decoder_layernorm.gamma,
+                                           gpt_weights->post_decoder_layernorm.beta,
+                                           layernorm_eps_,
+                                           local_batch_size * beam_width,
+                                           hidden_units_,
+                                           (float *)nullptr,
+                                           0,
+                                           stream_);
+                }
+                sync_check_cuda_error();
+
+                if (1) {
+                    float alpha = 1.0f;
+                    float beta = 0.0f;
+                    QK_LOG_INFO("logits gemm");
+                    cublas_wrapper_->Gemm(CUBLAS_OP_T,
+                                          CUBLAS_OP_N,
+                                          vocab_size_padded_, // n
+                                          local_batch_size * beam_width,
+                                          hidden_units_, // k
+                                          &alpha,
+                                          padded_embedding_kernel_ptr_,
+                                          gemm_data_type,
+                                          hidden_units_,                                  // k
+                                          decoder_output_final_buf + hidden_units_offset, // OPT: no final layer norm
+                                          gemm_data_type,
+                                          hidden_units_, // k
+                                          &beta,
+                                          logits_buf_ + vocab_size_units_offset,
+                                          CUDA_R_32F,
+                                          vocab_size_padded_, /* n */
+                                          CUDA_R_32F,
+                                          cublasGemmAlgo_t(-1));
+                } else {
+                    // QK_CHECK(vocab_size_padded_ % tensor_para_.world_size_ == 0);
+                    // const int local_vocab_size = vocab_size_padded_;
+                    // float alpha = 1.0f;
+                    // float beta = 0.0f;
+                    // QK_LOG_INFO("logits gemm");
+                    // cublas_wrapper_->Gemm(CUBLAS_OP_T,
+                    //                       CUBLAS_OP_N,
+                    //                       local_vocab_size, // n
+                    //                       local_batch_size * beam_width,
+                    //                       hidden_units_, // k
+                    //                       &alpha,
+                    //                       padded_embedding_kernel_ptr_
+                    //                           + 0 * local_vocab_size * hidden_units_,
+                    //                       gemm_data_type,
+                    //                       hidden_units_,                                  // k
+                    //                       decoder_output_final_buf + hidden_units_offset, // OPT: no final layer norm
+                    //                       gemm_data_type,
+                    //                       hidden_units_, // k
+                    //                       &beta,
+                    //                       nccl_logits_buf_ + vocab_size_units_offset
+                    //                           + 0 * local_batch_size * beam_width * local_vocab_size,
+                    //                       CUDA_R_32F,
+                    //                       local_vocab_size, /* n */
+                    //                       CUDA_R_32F,
+                    //                       cublasGemmAlgo_t(-1));
+                    // QK_LOG_INFO("logits all gather");
+                    // ftNcclAllGather(nccl_logits_buf_ + vocab_size_units_offset,
+                    //                 nccl_logits_buf_ + vocab_size_units_offset,
+                    //                 local_batch_size * beam_width * local_vocab_size,
+                    //                 tensor_para_.rank_,
+                    //                 tensor_para_,
+                    //                 stream_);
+                    // invokeTransposeAxis01(logits_buf_ + vocab_size_units_offset,
+                    //                       nccl_logits_buf_ + vocab_size_units_offset,
+                    //                       tensor_para_.world_size_,
+                    //                       local_batch_size * beam_width,
+                    //                       local_vocab_size,
+                    //                       stream_);
+                }
+
+                int tmp_local_batch_size = local_batch_size;
+                bool is_initialize_random_table = step_ == max_context_len;
+
+                std::unordered_map<std::string, Tensor> dynamic_decode_input_tensors{
+                    {"logits",
+                     Tensor{MEMORY_GPU, TYPE_FP32, {batch_size, beam_width, vocab_size_padded_}, logits_buf_}},
+                    {"step", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &step_}},
+                    {"max_input_length", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &max_context_len}},
+                    {"sequence_limit_length", Tensor{MEMORY_GPU, TYPE_UINT32, {batch_size}, seq_limit_len_}},
+                    {"end_id", Tensor{MEMORY_GPU, TYPE_INT32, {batch_size}, end_ids_buf_}},
+                    {"input_lengths",
+                     Tensor{MEMORY_GPU, TYPE_INT32, {batch_size, beam_width}, tiled_input_lengths_buf_}},
+                    {"ite", Tensor{MEMORY_CPU, TYPE_UINT32, {1}, &ite}},
+                    {"src_cache_indirection",
+                     Tensor{MEMORY_GPU,
+                            TYPE_INT32,
+                            {local_batch_size, beam_width, memory_len},
+                            cache_indirections_[src_indir_idx] + id_offset * memory_len}},
+                    {"local_batch_size", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &tmp_local_batch_size}},
+                    {"is_initialize_random_table", Tensor{MEMORY_CPU, TYPE_BOOL, {1}, &is_initialize_random_table}}};
+
+                for (auto t = input_tensors->begin(); t != input_tensors->end(); ++t) {
+                    if (dynamic_decode_input_tensors.find(t->first) == dynamic_decode_input_tensors.end()) {
+                        dynamic_decode_input_tensors.insert(*t);
+                    }
+                }
+
+                // common outputs
+                bool subbatch_should_stop = false;
+                std::unordered_map<std::string, Tensor> dynamic_decode_output_tensors{
+                    {"output_ids", Tensor{MEMORY_GPU, TYPE_INT32, {gen_len, batch_size, beam_width}, output_ids_buf_}},
+                    {"finished", Tensor{MEMORY_GPU, TYPE_BOOL, {batch_size * beam_width}, finished_buf_}},
+                    // cum_log_probs is necessary for beam search, while it is optional for sampling.
+                    {"cum_log_probs",
+                     Tensor{MEMORY_GPU,
+                            TYPE_FP32,
+                            {batch_size * beam_width},
+                            ((beam_width > 1) || (output_tensors->count("cum_log_probs") > 0)) ? cum_log_probs_ :
+                                                                                                 nullptr}},
+                    {"output_log_probs",
+                     Tensor{MEMORY_GPU,
+                            TYPE_FP32,
+                            {gen_len, batch_size, beam_width},
+                            output_tensors->count("output_log_probs") > 0
+                                    && output_tensors->at("output_log_probs").data != nullptr ?
+                                output_log_probs_buf_ :
+                                nullptr}},
+                    {"parent_ids", Tensor{MEMORY_GPU, TYPE_INT32, {gen_len, batch_size, beam_width}, parent_ids_buf_}},
+                    {"sequence_length", Tensor{MEMORY_GPU, TYPE_INT32, {batch_size * beam_width}, sequence_lengths_}},
+                    {"tgt_cache_indirection",
+                     Tensor{MEMORY_GPU,
+                            TYPE_INT32,
+                            {local_batch_size, beam_width, memory_len},
+                            cache_indirections_[tgt_indir_idx] + id_offset * memory_len}},
+                    {"should_stop", Tensor{MEMORY_CPU, TYPE_BOOL, {1}, &subbatch_should_stop}}};
+                for (auto t = output_tensors->begin(); t != output_tensors->end(); ++t) {
+                    // Handle exceptions.
+                    if (t->first == "cum_log_probs" || t->first == "output_log_probs") {
+                        continue;
+                    }
+                    dynamic_decode_output_tensors.insert(*t);
+                }
+
+                QK_LOG_INFO("result sampling and stop check");
+                // dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
+                generation_should_stop &= subbatch_should_stop;
+                microbatch_should_stop_[ite] = subbatch_should_stop;
+            } else {
+                // for other ranks, they cannot update generation_should_stop by DynamicDecode, set to false directly;
+                generation_should_stop &= microbatch_should_stop_[ite];
+            }
+
+            QK_LOG_INFO("result communication");
+            // send results to other rank
+            // if (fill_caches_only) {
+            //     invokePlusScalar(sequence_lengths_, 1, batch_size * beam_width, stream_);
+            // }
+
+            // When pipeline parallelism is enabled (pipeline_para_.world_size_ > 1), last rank needs to send updates
+            // to other ranks.
+            // if (step_ < gen_len - 1 && pipeline_para_.world_size_ > 1
+            //     && pipeline_para_.rank_ == pipeline_para_.world_size_ - 1) {
+            //     ftNcclGroupStart();
+            //     for (int i = 0; i < pipeline_para_.world_size_ - 1; i++) {
+            //         // send updated sequence_length_ to other rank
+            //         ftNcclSend(
+            //             sequence_lengths_ + id_offset, local_batch_size * beam_width, i, pipeline_para_, stream_);
+
+            //         // send updated microbatch_should_stop_
+            //         ftNcclSend(microbatch_should_stop_ + ite, 1, i, pipeline_para_, stream_);
+
+            //         // send updated cache_indirections
+            //         if (beam_width > 1) {
+            //             ftNcclSend(cache_indirections_[tgt_indir_idx] + id_offset * memory_len,
+            //                        local_batch_size * beam_width * memory_len,
+            //                        i,
+            //                        pipeline_para_,
+            //                        stream_);
+            //         }
+            //     }
+
+            //     // for ids of next step, only need to send updated ids to first rank
+            //     ftNcclSend(output_ids_buf_ + step_ * batch_size * beam_width + id_offset,
+            //                local_batch_size * beam_width,
+            //                0,
+            //                pipeline_para_,
+            //                stream_);
+
+            //     ftNcclGroupEnd();
+            //     // throw errors when detected
+            //     ftNcclStreamSynchronize(tensor_para_, pipeline_para_, stream_);
+            //     sync_check_cuda_error();
+            // }
+        }
+
+        // if (token_generated_cb_ && step_ + 1 < (int)gen_len) {
+        //     setOutputTensors(
+        //         output_tensors, input_tensors, gen_len, session_len, max_context_len, max_input_without_prompt_length);
+        //     sendTensorsToFirstPipelineNode(output_tensors, input_tensors);
+
+        //     if (pipeline_para_.rank_ == 0 && tensor_para_.rank_ == 0) {
+        //         token_generated_cb_(output_tensors, token_generated_ctx_);
+        //     }
+        // }
+
+        if (step_ == initial_step + max_input_length) {
+            /* We have just finished processing input: update the padding count:
+             * total_padding_count += (max_input_length - input_lengths) */
+            QK_LOG_INFO("Update padding count");
+            invokeUpdatePaddingCount(tiled_total_padding_count_,
+                                     input_tensors->at("input_lengths").getPtr<int>(),
+                                     max_input_length,
+                                     batch_size,
+                                     beam_width,
+                                     stream_);
+        }
+
+        if (generation_should_stop) {
+            break;
+        }
+    }
+    QK_LOG_INFO("communicate tensors");
+    // setOutputTensors(
+    //     output_tensors, input_tensors, gen_len, session_len, max_context_len, max_input_without_prompt_length);
+    // sendTensorsToFirstPipelineNode(output_tensors, input_tensors);
 }
 
 template class ParallelGpt<float>;
