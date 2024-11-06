@@ -41,6 +41,7 @@ struct BytesToType<16> {
     using type = float4;
 };
 
+static const float HALF_FLT_MAX = 65504.F;
 #define FINAL_MASK 0xffffffff
 
 // warp级别的shuffle操作进行规约求和

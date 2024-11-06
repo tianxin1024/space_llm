@@ -1,5 +1,6 @@
 #include "models/multi_gpu_gpt/ParallelGpt.h"
 #include "kernels/gpt_kernels.h"
+#include "kernels/decoding_kernels.h"
 
 namespace space_llm {
 
@@ -715,40 +716,40 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
         std::vector<int> p_prompt_tuning_lengths;
         QK_LOG_INFO("prompt embedding lookup");
         if (use_loaded_p_prompt_embedding) {
-            for (int bs_id = 0; bs_id < batch_size; ++bs_id) {
-                int task_id = prompt_learning_task_name_ids[bs_id];
-                std::pair<const T *, int> p_prompt_tuning_pair = {};
-                bool valid_task_name_id = task_id < gpt_weights->prompt_learning_table.size();
-                if (valid_task_name_id) {
-                    p_prompt_tuning_pair = gpt_weights->prompt_learning_table.at(task_id);
-                } else {
-                    // don't throw oor in case of model server failing
-                    QK_LOG_ERROR("p_prompt_tuning_weights not found for task id: " + std::to_string(task_id)
-                                 + "\n return with invalid output tensors");
-                    return;
-                }
-                if (input_lengths_h != nullptr) {
-                    if (bs_id == 0) {
-                        max_input_without_prompt_length = input_lengths_h[bs_id] - p_prompt_tuning_pair.second;
-                    } else {
-                        max_input_without_prompt_length =
-                            std::max(size_t(input_lengths_h[bs_id] - p_prompt_tuning_pair.second),
-                                     max_input_without_prompt_length);
-                    }
-                }
-                for (int bw_id = 0; bw_id < beam_width; ++bw_id) {
-                    // only weight ptrs needed here
-                    p_prompt_tuning_batch_ptrs.push_back(p_prompt_tuning_pair.first);
-                    p_prompt_tuning_lengths.push_back(p_prompt_tuning_pair.second);
-                }
-            }
+            // for (int bs_id = 0; bs_id < batch_size; ++bs_id) {
+            //     int task_id = prompt_learning_task_name_ids[bs_id];
+            //     std::pair<const T *, int> p_prompt_tuning_pair = {};
+            //     bool valid_task_name_id = task_id < gpt_weights->prompt_learning_table.size();
+            //     if (valid_task_name_id) {
+            //         p_prompt_tuning_pair = gpt_weights->prompt_learning_table.at(task_id);
+            //     } else {
+            //         // don't throw oor in case of model server failing
+            //         QK_LOG_ERROR("p_prompt_tuning_weights not found for task id: " + std::to_string(task_id)
+            //                      + "\n return with invalid output tensors");
+            //         return;
+            //     }
+            //     if (input_lengths_h != nullptr) {
+            //         if (bs_id == 0) {
+            //             max_input_without_prompt_length = input_lengths_h[bs_id] - p_prompt_tuning_pair.second;
+            //         } else {
+            //             max_input_without_prompt_length =
+            //                 std::max(size_t(input_lengths_h[bs_id] - p_prompt_tuning_pair.second),
+            //                          max_input_without_prompt_length);
+            //         }
+            //     }
+            //     for (int bw_id = 0; bw_id < beam_width; ++bw_id) {
+            //         // only weight ptrs needed here
+            //         p_prompt_tuning_batch_ptrs.push_back(p_prompt_tuning_pair.first);
+            //         p_prompt_tuning_lengths.push_back(p_prompt_tuning_pair.second);
+            //     }
+            // }
 
-            cudaAutoCpy(
-                prompt_learning_weight_batch_, p_prompt_tuning_batch_ptrs.data(), batch_size * beam_width, stream_);
+            // cudaAutoCpy(
+            //     prompt_learning_weight_batch_, p_prompt_tuning_batch_ptrs.data(), batch_size * beam_width, stream_);
 
-            cudaAutoCpy(tiled_prompt_lengths_buf_, p_prompt_tuning_lengths.data(), batch_size * beam_width, stream_);
+            // cudaAutoCpy(tiled_prompt_lengths_buf_, p_prompt_tuning_lengths.data(), batch_size * beam_width, stream_);
 
-            sync_check_cuda_error();
+            // sync_check_cuda_error();
         }
 
         // handle first step
@@ -922,15 +923,15 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
                      && request_prompt_type == PromptLearningType::no_prompt);
             max_input_length++;
             QK_LOG_INFO("decoding init");
-            // invokeDecodingInitialize(finished_buf_,
-            //                          sequence_lengths_,
-            //                          output_ids_buf_,
-            //                          cum_log_probs_,
-            //                          start_ids_buf_,
-            //                          batch_size,
-            //                          beam_width,
-            //                          max_input_length - 1,
-            //                          stream_);
+            invokeDecodingInitialize(finished_buf_,
+                                     sequence_lengths_,
+                                     output_ids_buf_,
+                                     cum_log_probs_,
+                                     start_ids_buf_,
+                                     batch_size,
+                                     beam_width,
+                                     max_input_length - 1,
+                                     stream_);
             std::vector<int> h_input_lengths(batch_size * beam_width, 1);
             cudaAutoCpy(tiled_input_lengths_buf_, h_input_lengths.data(), batch_size * beam_width, stream_);
             sync_check_cuda_error();
