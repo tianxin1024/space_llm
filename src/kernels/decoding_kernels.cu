@@ -182,7 +182,7 @@ void invokeEmbeddingLookupPosEncoding(T *from_tensor,
     dim3 block(std::min(hidden_units, 1024));
     if (position_encoding != nullptr) {
         QK_CHECK_WITH_INFO(prompt_param.use_request_p_prompt_embedding == false
-                               && prompt_param.p_prompt_tuning_batch_weigths == nullptr,
+                               && prompt_param.p_prompt_tuning_batch_weights == nullptr,
                            fmtstr("embeddingLookupPosEncoding still not support prompt tuning"));
         embeddingLookupPosEncoding<T><<<grid, block, 0, stream>>>(from_tensor,
                                                                   embedding_table,
@@ -209,5 +209,57 @@ void invokeEmbeddingLookupPosEncoding(T *from_tensor,
 }
 
 #undef EMBEDDING_LOOKUP
+
+template <typename T>
+void invokeEmbeddingLookupPosEncodingPadCount(T *from_tensor,
+                                              const T *embedding_table,
+                                              const T *position_encoding,
+                                              const int *all_ids,
+                                              const int *pad_count,
+                                              pPromptTuningParam<T> prompt_param,
+                                              const int local_token_num,
+                                              const int hidden_units,
+                                              const T scale,
+                                              const int step,
+                                              const int token_num,
+                                              const int ite,
+                                              const int seq_len,
+                                              cudaStream_t stream) {
+    invokeEmbeddingLookupPosEncoding<T>(from_tensor,
+                                        embedding_table,
+                                        position_encoding,
+                                        all_ids,
+                                        pad_count,
+                                        nullptr,
+                                        prompt_param,
+                                        local_token_num,
+                                        hidden_units,
+                                        scale,
+                                        step,
+                                        0,
+                                        token_num,
+                                        ite,
+                                        seq_len,
+                                        stream);
+}
+
+#define INSTANTIATE_LOOKUP_POS_ENCODING_PAD_COUNT(T)                                           \
+    template void invokeEmbeddingLookupPosEncodingPadCount(T *from_tensor,                     \
+                                                           const T *embedding_table,           \
+                                                           const T *position_encoding,         \
+                                                           const int *all_ids,                 \
+                                                           const int *pad_count,               \
+                                                           pPromptTuningParam<T> prompt_param, \
+                                                           const int local_token_num,          \
+                                                           const int hidden_units,             \
+                                                           const T scale,                      \
+                                                           const int step,                     \
+                                                           const int token_num,                \
+                                                           const int ite,                      \
+                                                           const int seq_len,                  \
+                                                           cudaStream_t stream)
+INSTANTIATE_LOOKUP_POS_ENCODING_PAD_COUNT(float);
+INSTANTIATE_LOOKUP_POS_ENCODING_PAD_COUNT(half);
+#undef INSTANTIATE_LOOKUP_POS_ENCODING_PAD_COUNT
 
 } // namespace space_llm
