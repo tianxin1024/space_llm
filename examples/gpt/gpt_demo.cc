@@ -55,7 +55,7 @@ int read_start_ids(int batch_size, std::vector<int> *v_start_lengths, std::vecto
     std::vector<std::vector<int>> tmp_start_ids;
     std::vector<int> tmp_start_lengths;
 
-    std::string file_name = "../../examples/gpt/start_ids.csv";
+    std::string file_name = "../examples/gpt/start_ids.csv";
     std::ifstream start_id_file(file_name, std::ios::in);
 
     if (start_id_file.is_open()) {

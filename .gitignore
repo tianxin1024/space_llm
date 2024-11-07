@@ -4,3 +4,4 @@
 debug
 ./models/
 /models
+gpt_example.log
