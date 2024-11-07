@@ -1,9 +1,30 @@
+#pragma once
+
 #include "layers/BaseLayer.h"
+#include "layers/DynamicDecodeBaseLayer.h"
 
 namespace space_llm {
 
 template <typename T>
 class DynamicDecodeLayer : public BaseLayer {
+protected:
+    size_t vocab_size_;
+    size_t vocab_size_padded_;
+    cudaDeviceProp *cuda_device_prop_;
+
+    DynamicDecodeBaseLayer *online_beamsearch_decode_;
+    DynamicDecodeBaseLayer *beamsearch_decode_;
+    DynamicDecodeBaseLayer *topk_decode_;
+    DynamicDecodeBaseLayer *topp_decode_;
+
+    void allocateBuffer() override;
+    void freeBuffer() override;
+    void initialize();
+    bool hasDiffRuntimeArgs(TensorMap *input_tensors);
+
+    bool has_diff_runtime_args_ = false;
+    int *h_pinned_finished_sum_ = nullptr;
+
 public:
     DynamicDecodeLayer(size_t vocab_size,
                        size_t vocab_size_padded,

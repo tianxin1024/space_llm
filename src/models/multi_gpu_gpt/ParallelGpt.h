@@ -62,7 +62,7 @@ private:
 
     ParallelGptDecoder<T> *gpt_decoder_;
     ParallelGptContextDecoder<T> *gpt_context_decoder_;
-    // DynamicDecodeLayer<float> *dynamic_decode_layer_;
+    DynamicDecodeLayer<float> *dynamic_decode_layer_;
 
     void allocateBuffer() override;
     void allocateBuffer(size_t batch_size,

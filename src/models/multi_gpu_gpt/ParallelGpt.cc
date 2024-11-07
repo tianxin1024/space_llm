@@ -625,19 +625,19 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
     const std::vector<size_t> self_v_cache_shape = {
         num_layer_, batch_size * beam_width, local_head_num_, memory_len, size_per_head_};
 
-    // {
-    //     TensorMap input_map(*input_tensors);
+    {
+        TensorMap input_map(*input_tensors);
 
-    //     QK_LOG_INFO("dynamic decode setup");
-    //     dynamic_decode_layer_->setup(batch_size, beam_width, &input_map);
-    //     handleOptArg(&input_map, "start_id", start_ids_buf_, start_id_, batch_size);
-    //     handleOptArg(&input_map, "end_id", end_ids_buf_, end_id_, batch_size);
-    // }
+        QK_LOG_INFO("dynamic decode setup");
+        dynamic_decode_layer_->setup(batch_size, beam_width, &input_map);
+        handleOptArg(&input_map, "start_id", start_ids_buf_, start_id_, batch_size);
+        handleOptArg(&input_map, "end_id", end_ids_buf_, end_id_, batch_size);
+    }
 
-    // if (gpt_variant_params_.use_attention_linear_bias) {
-    //     QK_LOG_INFO("build alibi slopes");
-    //     invokeBuildAlibiSlopes(linear_bias_slopes_, head_num_, stream_);
-    // }
+    if (gpt_variant_params_.use_attention_linear_bias) {
+        QK_LOG_INFO("build alibi slopes");
+        invokeBuildAlibiSlopes(linear_bias_slopes_, head_num_, stream_);
+    }
 
     // continue_gen == false
     if (continue_gen) {
