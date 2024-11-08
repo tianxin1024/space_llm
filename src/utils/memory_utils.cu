@@ -46,6 +46,19 @@ template void deviceFree(char *&ptr);
 template void deviceFree(int8_t *&ptr);
 
 template <typename T>
+void deviceFill(T *devptr, size_t size, T value, cudaStream_t stream) {
+    T *arr = new T[size];
+    std::fill(arr, arr + size, value);
+    check_cuda_error(cudaMemcpyAsync(devptr, arr, sizeof(T) * size, cudaMemcpyHostToDevice, stream));
+    delete[] arr;
+}
+
+template void deviceFill(float *devptr, size_t size, float value, cudaStream_t stream);
+template void deviceFill(half *devptr, size_t size, half value, cudaStream_t stream);
+template void deviceFill(int *devptr, size_t size, int value, cudaStream_t stream);
+template void deviceFill(bool *devptr, size_t size, bool value, cudaStream_t stream);
+
+template <typename T>
 __global__ void cuda_random_uniform_kernel(T *buffer, const size_t size, const int seq_offset) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     curandState_t local_state;

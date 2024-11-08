@@ -4,6 +4,7 @@
 #include "utils/prompt_learning.h"
 #include "layers/BaseLayer.h"
 #include "layers/attention_layers/BaseAttentionLayer.h"
+#include "layers/DynamicDecodeLayer.h"
 #include "models/multi_gpu_gpt/ParallelGptContextDecoder.h"
 #include "models/multi_gpu_gpt/ParallelGptDecoder.h"
 #include "models/multi_gpu_gpt/ParallelGptDecoderLayerWeight.h"

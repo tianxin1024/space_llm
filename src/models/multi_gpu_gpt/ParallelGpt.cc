@@ -641,32 +641,6 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
 
     // continue_gen == false
     if (continue_gen) {
-        // QK_LOG_INFO("input tiling and init");
-        // invokeTileGptInputs(tiled_input_ids_buf_,
-        //                     tiled_input_lengths_buf_,
-        //                     input_tensors->at("input_ids").getPtr<int>(),
-        //                     input_tensors->at("input_lengths").getPtr<const int>(),
-        //                     batch_size,
-        //                     beam_width,
-        //                     max_input_length,
-        //                     stream_);
-        // invokePlusScalar(tiled_input_lengths_buf_, initial_step, batch_size * beam_width, stream_);
-        // sync_check_cuda_error();
-        // invokeDecodingInitialize(finished_buf_,
-        //                          sequence_lengths_,
-        //                          nullptr,
-        //                          cum_log_probs_,
-        //                          start_ids_buf_,
-        //                          batch_size,
-        //                          beam_width,
-        //                          initial_step - 1,
-        //                          stream_);
-        // invokeTransposeAxis01(output_ids_buf_ + initial_step * batch_size * beam_width,
-        //                       tiled_input_ids_buf_,
-        //                       batch_size * beam_width,
-        //                       max_input_length,
-        //                       1,
-        //                       stream_);
     } else {
         // TODO(bhsueh) Initilaize them in one kernel
         // initialize the output ids and parent ids
@@ -695,6 +669,7 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
         bool use_shared_contexts = (shared_contexts_ratio_ > 0.0f) && (max_input_length >= 1) && (batch_size > 1);
         QK_LOG_INFO("find context dups");
         if (use_shared_contexts) {
+            // TODO ...
             // invokeFindContextDups(shared_contexts_idx_,
             //                       batch_to_compact_idx_,
             //                       compact_idx_,

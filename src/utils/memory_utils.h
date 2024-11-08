@@ -16,6 +16,9 @@ template <typename T>
 void deviceFree(T *&ptr);
 
 template <typename T>
+void deviceFill(T *buffer, size_t size, T value, cudaStream_t stream = 0);
+
+template <typename T>
 void cudaD2Hcpy(T *tgt, const T *src, const size_t size);
 
 template <typename T>
