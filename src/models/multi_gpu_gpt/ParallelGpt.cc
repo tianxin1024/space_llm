@@ -634,10 +634,10 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
         handleOptArg(&input_map, "end_id", end_ids_buf_, end_id_, batch_size);
     }
 
-    if (gpt_variant_params_.use_attention_linear_bias) {
-        QK_LOG_INFO("build alibi slopes");
-        invokeBuildAlibiSlopes(linear_bias_slopes_, head_num_, stream_);
-    }
+    // if (gpt_variant_params_.use_attention_linear_bias) {
+    //     QK_LOG_INFO("build alibi slopes");
+    //     invokeBuildAlibiSlopes(linear_bias_slopes_, head_num_, stream_);
+    // }
 
     // continue_gen == false
     if (continue_gen) {
