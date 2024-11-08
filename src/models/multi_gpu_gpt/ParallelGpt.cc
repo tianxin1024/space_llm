@@ -43,14 +43,14 @@ void ParallelGpt<T>::initialize() {
                                              sparse_,
                                              int8_mode_);
 
-    // dynamic_decode_layer_ = new DynamicDecodeLayer<float>(vocab_size_,
-    //                                                       vocab_size_padded_,
-    //                                                       0, // end_id, deprecated
-    //                                                       stream_,
-    //                                                       cublas_wrapper_,
-    //                                                       allocator_,
-    //                                                       is_free_buffer_after_forward_,
-    //                                                       cuda_device_prop_);
+    dynamic_decode_layer_ = new DynamicDecodeLayer<float>(vocab_size_,
+                                                          vocab_size_padded_,
+                                                          0, // end_id, deprecated
+                                                          stream_,
+                                                          cublas_wrapper_,
+                                                          allocator_,
+                                                          is_free_buffer_after_forward_,
+                                                          cuda_device_prop_);
 }
 
 template <typename T>
