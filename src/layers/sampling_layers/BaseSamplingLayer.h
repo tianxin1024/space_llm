@@ -21,6 +21,7 @@ protected:
     bool *skip_decode_buf_ = nullptr;
 
     float *temperature_ = nullptr;
+    bool *skip_decode_ = nullptr;
 
     virtual void freeBuffer();
     virtual void allocateBuffer() = 0;

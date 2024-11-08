@@ -1,4 +1,5 @@
 #include "layers/DynamicDecodeLayer.h"
+#include "layers/sampling_layers/TopKSamplingLayer.h"
 
 namespace space_llm {
 
@@ -13,19 +14,19 @@ void DynamicDecodeLayer<T>::initialize() {
                                             1.0f, // temperature_, deprecated
                                             0.0f, // len_penalty_, deprecated
                                             1.0f, // repetition_penalty_, deprecated
-                                            stream_, cublas_wrapper, allocator_, false);
-    topp_decode_ = new TopPSamplingLayer<T>(0, vocab_size_, vocab_size_padded_,
-                                            0,    // end_id, deprecated
-                                            0.0f, // top_p_, deprecated
-                                            0,    // random_seed_, deprecated
-                                            1.0f, // temperature_, deprecated
-                                            0.0f, // len_penalty_, deprecated
-                                            1.0f, // repetition_penalty_, deprecated
-                                            stream_,
-                                            cublas_wrapper_,
-                                            allocator_,
-                                            false,
-                                            cuda_device_prop_);
+                                            stream_, cublas_wrapper_, allocator_, false);
+    // topp_decode_ = new TopPSamplingLayer<T>(0, vocab_size_, vocab_size_padded_,
+    //                                         0,    // end_id, deprecated
+    //                                         0.0f, // top_p_, deprecated
+    //                                         0,    // random_seed_, deprecated
+    //                                         1.0f, // temperature_, deprecated
+    //                                         0.0f, // len_penalty_, deprecated
+    //                                         1.0f, // repetition_penalty_, deprecated
+    //                                         stream_,
+    //                                         cublas_wrapper_,
+    //                                         allocator_,
+    //                                         false,
+    //                                         cuda_device_prop_);
 
     // TODO tianxin ...
 }

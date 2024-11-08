@@ -38,3 +38,8 @@ set_property(TARGET decoder_masked_multihead_attention PROPERTY CUDA_RESOLVE_DEV
 add_library(decoding_kernels STATIC decoding_kernels.cu)
 set_property(TARGET decoding_kernels PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET decoding_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+
+add_library(sampling_topk_kernels STATIC sampling_topk_kernels.cu)
+set_property(TARGET sampling_topk_kernels PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET sampling_topk_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+

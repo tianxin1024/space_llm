@@ -26,6 +26,51 @@ BaseSamplingLayer<T>::BaseSamplingLayer(size_t max_batch_size,
 }
 
 template <typename T>
+void BaseSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tensor top_p) {
+    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
+    curandstate_buf_ = reinterpret_cast<curandState_t *>(
+        allocator_->reMalloc(curandstate_buf_, sizeof(curandState_t) * batch_size, false));
+    random_seeds_buf_ = reinterpret_cast<unsigned long long *>(
+        allocator_->reMalloc(random_seeds_buf_, sizeof(unsigned long long) * batch_size, false));
+    temperature_buf_ =
+        reinterpret_cast<float *>(allocator_->reMalloc(temperature_buf_, sizeof(float) * batch_size, false));
+    // repetition_penalty_buf_ =
+    //     reinterpret_cast<float *>(allocator_->reMalloc(repetition_penalty_buf_, sizeof(float) * batch_size, false));
+    // min_lengths_buf_ = reinterpret_cast<int *>(allocator_->reMalloc(min_lengths_buf_, sizeof(int) * batch_size, false));
+    // runtime_logits_buf_ = reinterpret_cast<T *>(
+    //     allocator_->reMalloc(runtime_logits_buf_, sizeof(T) * batch_size * vocab_size_padded_, false));
+    skip_decode_buf_ =
+        reinterpret_cast<bool *>(allocator_->reMalloc(skip_decode_buf_, sizeof(bool) * batch_size, false));
+
+    // host buffers.
+    temperature_ = (float *)std::realloc((void *)temperature_, batch_size * sizeof(float));
+    // repetition_penalty_ = (float *)std::realloc((void *)repetition_penalty_, batch_size * sizeof(float));
+    // min_lengths_ = (int *)std::realloc((void *)min_lengths_, batch_size * sizeof(int));
+    skip_decode_ = (bool *)std::realloc((void *)skip_decode_, batch_size * sizeof(bool));
+
+    is_allocate_buffer_ = true;
+}
+
+template <typename T>
+void BaseSamplingLayer<T>::freeBuffer() {
+    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
+    if (is_allocate_buffer_) {
+        allocator_->free((void **)(&curandstate_buf_));
+        allocator_->free((void **)(&random_seeds_buf_));
+        allocator_->free((void **)(&temperature_buf_));
+        // allocator_->free((void **)(&repetition_penalty_buf_));
+        // allocator_->free((void **)(&min_lengths_buf_));
+        // allocator_->free((void **)(&runtime_logits_buf_));
+        allocator_->free((void **)(&skip_decode_buf_));
+        std::free(temperature_);
+        // std::free(repetition_penalty_);
+        // std::free(min_lengths_);
+        std::free(skip_decode_);
+        is_allocate_buffer_ = false;
+    }
+}
+
+template <typename T>
 BaseSamplingLayer<T>::BaseSamplingLayer(BaseSamplingLayer const &sampling_layer) :
     DynamicDecodeBaseLayer(sampling_layer),
     vocab_size_(sampling_layer.vocab_size_),

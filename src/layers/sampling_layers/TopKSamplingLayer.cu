@@ -1,4 +1,5 @@
 #include "layers/sampling_layers/TopKSamplingLayer.h"
+#include "kernels/sampling_topk_kernels.h"
 
 namespace space_llm {
 
