@@ -6,15 +6,28 @@ template <typename T>
 void DynamicDecodeLayer<T>::initialize() {
     QK_LOG_DEBUG(__PRETTY_FUNCTION__);
 
+    topk_decode_ = new TopKSamplingLayer<T>(0, vocab_size_, vocab_size_padded_,
+                                            0,    // end_id, deprecated
+                                            0,    // top_k_, deprecated
+                                            0,    // random_seed_, deprecated
+                                            1.0f, // temperature_, deprecated
+                                            0.0f, // len_penalty_, deprecated
+                                            1.0f, // repetition_penalty_, deprecated
+                                            stream_, cublas_wrapper, allocator_, false);
+    topp_decode_ = new TopPSamplingLayer<T>(0, vocab_size_, vocab_size_padded_,
+                                            0,    // end_id, deprecated
+                                            0.0f, // top_p_, deprecated
+                                            0,    // random_seed_, deprecated
+                                            1.0f, // temperature_, deprecated
+                                            0.0f, // len_penalty_, deprecated
+                                            1.0f, // repetition_penalty_, deprecated
+                                            stream_,
+                                            cublas_wrapper_,
+                                            allocator_,
+                                            false,
+                                            cuda_device_prop_);
+
     // TODO tianxin ...
-    // topk_decode_ = new TopkSamplingLayer<T>(0, vocab_size_, vocab_size_padded_,
-    //                                         0,    // end_id, deprecated
-    //                                         0,    // top_k_, deprecated
-    //                                         0,    // random_seed_, deprecated
-    //                                         1.0f, // temperature_, deprecated
-    //                                         0.0f, // len_penalty_, deprecated
-    //                                         1.0f, // repetition_penalty_, deprecated
-    //                                         stream_, cublas_wrapper, allocator_, false);
 }
 template <typename T>
 DynamicDecodeLayer<T>::DynamicDecodeLayer(size_t vocab_size,

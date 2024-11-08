@@ -12,11 +12,13 @@ protected:
     size_t vocab_size_padded_;
 
     size_t sampling_workspace_size_;
+    void *sampling_workspace_ = nullptr;
 
     curandState_t *curandstate_buf_ = nullptr;
     unsigned long long *random_seeds_buf_ = nullptr;
 
     float *temperature_buf_ = nullptr;
+    bool *skip_decode_buf_ = nullptr;
 
     float *temperature_ = nullptr;
 

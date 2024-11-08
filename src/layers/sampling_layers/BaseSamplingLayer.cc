@@ -112,4 +112,8 @@ void BaseSamplingLayer<T>::forward(std::unordered_map<std::string, Tensor> *outp
 template <typename T>
 void BaseSamplingLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_tensors) {
 }
+
+template class BaseSamplingLayer<float>;
+template class BaseSamplingLayer<half>;
+
 } // namespace space_llm
