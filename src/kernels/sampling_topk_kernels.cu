@@ -1,3 +1,4 @@
+#include <cub/cub.cuh>
 #include "kernels/sampling_topk_kernels.h"
 #include "kernels/reduce_kernel_utils.cuh"
 
@@ -18,9 +19,188 @@ void invokeCurandInitialize(curandState_t *state,
     curandInitialize<<<grid, block, 0, stream>>>(state, batch_size, random_seed);
 }
 
+template <typename T, int BLOCK_SIZE_, int BLOCKS_PER_BEAM_>
+__global__ void topk_stage1(const T *__restrict log_probs,
+                            T *tmp_log_probs,
+                            int *topk_tmp_id_buf,
+                            T *topk_tmp_val_buf,
+                            const bool *finished,
+                            const int max_top_k,
+                            const int *top_ks,
+                            const int vocab_size,
+                            const int *end_ids,
+                            const bool *skip_decode) {
+    typedef cub::BlockReduce<TopK_2<T>, BLOCK_SIZE_> BlockReduce;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    const int tid = threadIdx.x;
+    const int bid = blockIdx.x;
+
+    const int batch_id = bid / BLOCKS_PER_BEAM_; // row id for log_probs
+    if (skip_decode != nullptr && skip_decode[batch_id]) {
+        return;
+    }
+    const int block_lane = bid % BLOCKS_PER_BEAM_;                    // block id for a beam
+    const int k = (top_ks != nullptr) ? top_ks[batch_id] : max_top_k; // batch_id = batch index
+
+    const int tmp_log_buf_index = batch_id * vocab_size;
+    const int tmp_topk_buf_index = batch_id * BLOCKS_PER_BEAM_ * max_top_k + block_lane * k;
+
+    TopK_2<T> partial;
+    const bool IS_FP16 = std::is_same<T, half>::value;
+    const T MAX_T_VAL = (IS_FP16) ? HALF_FLT_MAX : FLT_MAX;
+
+    if (finished != nullptr && finished[batch_id] == true) {
+        if (tid < k) {
+            const int index = tmp_topk_buf_index + tid;
+            if (block_lane == 0 && tid == 0) {
+                const int end_id = end_ids[batch_id];
+                topk_tmp_id_buf[index] = tmp_log_buf_index + end_id;
+                topk_tmp_val_buf[index] = log_probs[tmp_log_buf_index + end_id];
+            } else {
+                topk_tmp_id_buf[index] = -1;
+                topk_tmp_val_buf[index] = -MAX_T_VAL;
+            }
+        }
+        return;
+    }
+
+    for (int elem_id = tid + block_lane * BLOCK_SIZE_; elem_id < vocab_size; elem_id += BLOCK_SIZE_ * BLOCKS_PER_BEAM_) {
+        int index = elem_id + tmp_log_buf_index;
+        tmp_log_probs[index] = log_probs[index];
+    }
+
+    for (int ite = 0; ite < k; ++ite) {
+        partial.init();
+
+#pragma unroll
+        for (int elem_id = tid + block_lane * BLOCK_SIZE_; elem_id < vocab_size; elem_id += BLOCK_SIZE_ * BLOCKS_PER_BEAM_) {
+            int index = elem_id + tmp_log_buf_index;
+            partial.insert(tmp_log_probs[index], index);
+        }
+
+        TopK_2<T> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_op_2<T>);
+
+        if (tid == 0) {
+            const int index = tmp_topk_buf_index + ite;
+            topk_tmp_id_buf[index] = total.p;
+            topk_tmp_val_buf[index] = total.u;
+            tmp_log_probs[total.p] = -MAX_T_VAL;
+        }
+        __syncthreads();
+    }
+}
+
+template <typename T, int BLOCK_SIZE_, int BLOCKS_PER_BEAM_>
+__global__ void topk_stage2_sampling(const int *__restrict topk_tmp_id_buf,
+                                     T *topk_tmp_val_buf,
+                                     int *ids,
+                                     int *sequence_length,
+                                     bool *finished,
+                                     float *cum_log_probs,
+                                     float *output_log_probs,
+                                     const int max_top_k,
+                                     const int *top_ks,
+                                     const float top_p,
+                                     const float *top_ps,
+                                     curandState_t *curandstate,
+                                     const int *end_ids,
+                                     const int vocab_size,
+                                     const bool *skip_decode) {
+    const bool IS_FP16 = std::is_same<T, half>::value;
+    const T MAX_T_VAL = (IS_FP16) ? HALF_FLT_MAX : FLT_MAX;
+
+    const int tid = threadIdx.x;
+    const int batch_id = blockIdx.x;
+    if (skip_decode != nullptr && skip_decode[batch_id]) {
+        return;
+    }
+
+    const int k = (top_ks != nullptr) ? top_ks[batch_id] : max_top_k;
+    const float prob_threshold = (top_ps != nullptr) ? top_ps[batch_id] : top_p;
+    const int size = k * BLOCKS_PER_BEAM_;
+    const int stride = max_top_k * BLOCKS_PER_BEAM_;
+
+    typedef cub::BlockReduce<TopK_2<float>, BLOCK_SIZE_> BlockReduce;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+    extern __shared__ char array[];
+    __shared__ float rand_num;
+    __shared__ float s_sum;
+    __shared__ float s_max;
+    T *s_val = topk_tmp_val_buf + batch_id * stride;
+    int *s_id = reinterpret_cast<int *>(array);
+    if (tid == 0) {
+        s_sum = 0.0f;
+    }
+    TopK_2<float> partial;
+
+    if (finished != nullptr && finished[batch_id] == true) {
+        ids[batch_id] = end_ids[batch_id];
+        return;
+    }
+
+    float *s_val2 = reinterpret_cast<float *>(s_id + k);
+    for (int ite = 0; ite < k; ++ite) {
+        partial.init();
+#pragma unroll
+        for (int i = tid; i < size; i += BLOCK_SIZE_) {
+            partial.insert((float)s_val[i], i);
+        }
+
+        TopK_2<float> total = BlockReduce(temp_storage).Reduce(partial, reduce_topk_op_2<float>);
+
+        if (tid == 0) {
+            if (ite == 0) {
+                s_max = total.u;
+            }
+            s_id[ite] = total.p;
+            s_val[total.p] = -MAX_T_VAL;
+
+            // when cum_log_probs are computed, topk_tmp_val_buf (logits_buf_) are already pre-processed by softmax_kernel
+            if (cum_log_probs == nullptr && output_log_probs == nullptr) {
+                total.u = __expf(total.u - s_max);
+            }
+            s_val2[ite] = total.u;
+            s_sum += total.u;
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        rand_num = (float)curand_uniform(curandstate + blockIdx.x) * prob_threshold * s_sum;
+        for (int i = 0; i < k; i++) {
+            float exp_logit = s_val2[i];
+            rand_num = rand_num - exp_logit;
+            if (rand_num <= 0.0f || i == k - 1) {
+                ids[batch_id] = topk_tmp_id_buf[batch_id * stride + s_id[i]] % vocab_size;
+                if (cum_log_probs != nullptr || output_log_probs != nullptr) {
+                    float log_prob = logf(exp_logit);
+                    if (cum_log_probs != nullptr) {
+                        cum_log_probs[batch_id] += log_prob;
+                    }
+                    if (output_log_probs != nullptr) {
+                        // 'output_log_probs' is the probability induced by the top-k sampling.
+                        // We normalize the probability 'exp_logit' of the selected token by
+                        // the probability 's_sum' of a set of top-k tokens, meaning the log_prob
+                        // is the probability of the selected token, conditioned on the event that
+                        // it is selected, i.e.,
+                        //   log_prob = log P(i | i is in top-k) = log(exp_logit / s_sum).
+                        output_log_probs[batch_id] = log_prob - logf(s_sum);
+                    }
+                }
+                break;
+            }
+        }
+        if (sequence_length != nullptr && finished != nullptr) {
+            sequence_length[batch_id] = finished[batch_id] ? sequence_length[batch_id] : sequence_length[batch_id] + 1;
+            finished[batch_id] = ids[batch_id] == end_ids[batch_id] ? true : false;
+        }
+    }
+}
+
 #define CASE_K(K_MIN, K_MAX, BLOCK_SIZE_1_, BLOCK_SIZE_2_, BLOCKS_PER_BEAM_)                                       \
     case K_MIN ... K_MAX:                                                                                          \
-        top_stage1<T, BLOCK_SIZE_1_, BLOCKS_PER_BEAM_>                                                             \
+        topk_stage1<T, BLOCK_SIZE_1_, BLOCKS_PER_BEAM_>                                                            \
             <<<batch_size * BLOCKS_PER_BEAM_, BLOCK_SIZE_1_, 0, stream>>>(log_probs,                               \
                                                                           temp_log_probs,                          \
                                                                           topk_tmp_id_buf,                         \

@@ -211,4 +211,27 @@ __inline__ __device__ T blockReduceMaxV2(T *val) {
     return (T)0.0f;
 }
 
+template <typename T>
+struct TopK_2 {
+    int p = -1;
+    T u = -((std::is_same<T, half>::value) ? HALF_FLT_MAX : FLT_MAX);
+
+    __device__ __forceinline__ void insert(T elem, int elem_id) {
+        if (elem > u) {
+            u = elem;
+            p = elem_id;
+        }
+    }
+
+    __device__ __forceinline__ void init() {
+        u = -((std::is_same<T, half>::value) ? HALF_FLT_MAX : FLT_MAX);
+        p = -1;
+    }
+};
+
+template <typename T>
+__device__ __forceinline__ TopK_2<T> reduce_topk_op_2(const TopK_2<T> &a, const TopK_2<T> &b) {
+    return a.u > b.u ? a : b;
+}
+
 } // namespace space_llm
