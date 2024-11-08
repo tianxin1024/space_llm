@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 add_subdirectory(attention_layers)
+add_subdirectory(sampling_layers)
 
 add_library(ffnLayer STATIC ffnLayer.cc)
 set_property(TARGET ffnLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)

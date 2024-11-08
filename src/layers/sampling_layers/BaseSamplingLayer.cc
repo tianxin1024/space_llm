@@ -1,4 +1,6 @@
 #include "layers/sampling_layers/BaseSamplingLayer.h"
+#include "utils/memory_utils.h"
+#include "kernels/sampling_topk_kernels.h"
 
 namespace space_llm {
 
@@ -66,10 +68,11 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
             invokeCurandInitialize(curandstate_buf_, batch_size, random_seeds.getVal<unsigned long long>(), stream_);
             sync_check_cuda_error();
         } else {
-            unsigned long long *random_seed_ptr = random_seeds.getPtr<unsigned long long>();
-            cudaAutoCpy(random_seeds_buf_, random_seed_ptr, batch_size, stream_);
-            invoke_CurandBatchInitialize(curandstate_buf_, batch_size, random_seeds_buf_, stream_);
-            sync_check_cuda_error();
+            // TODO ...
+            // unsigned long long *random_seed_ptr = random_seeds.getPtr<unsigned long long>();
+            // cudaAutoCpy(random_seeds_buf_, random_seed_ptr, batch_size, stream_);
+            // invoke_CurandBatchInitialize(curandstate_buf_, batch_size, random_seeds_buf_, stream_);
+            // sync_check_cuda_error();
         }
     } else {
         // Initialize curand states using the default seed 0.
