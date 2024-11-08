@@ -35,6 +35,40 @@ size_t Tensor::sizeBytes() const {
     return size() * Tensor::getTypeSize(type);
 }
 
+std::string Tensor::whereToString() const {
+    static const std::unordered_map<MemoryType, std::string> mem_to_string{
+        {MEMORY_CPU, "CPU"}, {MEMORY_CPU_PINNED, "CPU_PINNED"}, {MEMORY_GPU, "GPU"}};
+    return mem_to_string.at(where);
+}
+
+std::string Tensor::toString() const {
+    std::string memtype_str = whereToString();
+
+    static const std::unordered_map<DataType, std::string> type_to_string{
+        {TYPE_BOOL, "BOOL"},
+        {TYPE_UINT8, "UINT8"},
+        {TYPE_UINT16, "UINT16"},
+        {TYPE_UINT32, "UINT32"},
+        {TYPE_UINT64, "UINT64"},
+        {TYPE_INT8, "INT8"},
+        {TYPE_INT16, "INT16"},
+        {TYPE_INT32, "INT32"},
+        {TYPE_INT64, "INT64"},
+        {TYPE_BF16, "BF16"},
+        {TYPE_FP16, "FP16"},
+        {TYPE_FP32, "FP32"},
+        {TYPE_FP64, "FP64"},
+        {TYPE_BYTES, "BYTES"},
+        {TYPE_INVALID, "INVALID"},
+        {TYPE_FP8_E4M3, "E4M3"},
+        {TYPE_VOID, "VOID"},
+    };
+    return fmtstr("Tensor[where=%s, type=%s, shape=%s, data=%p]",
+                  memtype_str.c_str(),
+                  type_to_string.at(type).c_str(),
+                  vec2str(shape).c_str(),
+                  data);
+}
 std::string Tensor::getNumpyTypeDesc(DataType type) const {
     static const std::unordered_map<DataType, std::string> type_map{{TYPE_INVALID, "x"},
                                                                     {TYPE_BOOL, "?"},
@@ -149,6 +183,20 @@ std::vector<std::string> TensorMap::keys() const {
         key_names.push_back(kv.first);
     }
     return key_names;
+}
+
+std::string TensorMap::toString() {
+    std::stringstream ss;
+    ss << "{";
+    std::vector<std::string> key_names = keys();
+    for (size_t i = 0; i < tensor_map_.size(); ++i) {
+        ss << key_names[i] << ": " << at(key_names[i]).toString();
+        if (i < tensor_map_.size() - 1) {
+            ss << ", ";
+        }
+    }
+    ss << "}";
+    return ss.str();
 }
 
 } // namespace space_llm

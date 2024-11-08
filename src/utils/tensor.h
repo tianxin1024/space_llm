@@ -96,6 +96,8 @@ struct Tensor {
     size_t size() const;
     size_t sizeBytes() const;
 
+    std::string whereToString() const;
+    std::string toString() const;
     std::string getNumpyTypeDesc(DataType type) const;
 
     static DataType typeFromNumpyDesc(std::string type);
@@ -428,6 +430,8 @@ public:
         }
         return default_value;
     }
+
+    std::string toString();
 
 }; // class TensorMap
 

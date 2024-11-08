@@ -18,6 +18,34 @@ void DynamicDecodeLayer<T>::initialize() {
 }
 
 template <typename T>
+bool DynamicDecodeLayer<T>::hasDiffRuntimeArgs(TensorMap *input_tensors) {
+    for (int i = 0; i < (int)runtime_arg_names_.size(); ++i) {
+        if (input_tensors->isExist(runtime_arg_names_[i])) {
+            auto tensor = input_tensors->at(runtime_arg_names_[i]);
+            QK_CHECK(tensor.shape.size() == 1);
+            for (int j = 1; j < (int)tensor.shape[0]; ++j) {
+                const void *data = tensor.data;
+                switch (tensor.type) {
+                case TYPE_FP32:
+                    if (((const float *)data)[0] != ((const float *)data)[j]) {
+                        return true;
+                    }
+                    break;
+                case TYPE_FP16:
+                    if (((const half *)data)[0] != ((const half *)data)[j]) {
+                        return true;
+                    }
+                    break;
+                default:
+                    QK_CHECK_WITH_INFO(false, runtime_arg_names_[i] + ": " + tensor.toString() + " is invalid.");
+                    break;
+                }
+            }
+        }
+    }
+}
+
+template <typename T>
 DynamicDecodeLayer<T>::DynamicDecodeLayer(size_t vocab_size,
                                           size_t vocab_size_padded,
                                           int end_id,
