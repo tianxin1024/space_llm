@@ -4,6 +4,13 @@
 
 namespace space_llm {
 
+void invokeTopPInitialize(int *topp_id_val_buf,
+                          int *topp_offset_buf,
+                          int *begin_topp_offset_buf_,
+                          const size_t batch_size,
+                          const int n,
+                          cudaStream_t stream);
+
 template <typename T>
 void invokeTopPSampling(void *workspace,
                         size_t &workspace_size,
@@ -48,6 +55,16 @@ void invokeBatchTopPSampling(void *workspace,
                              cudaStream_t stream,
                              cudaDeviceProp *cuda_device_prop,
                              const bool *skip_decode);
+
+template <typename T>
+void invokeAddBiasSoftMax(T *logits,
+                          const T *bias,
+                          const int *end_ids,
+                          const bool *finished,
+                          const int m,
+                          const int n_padded,
+                          const int n,
+                          cudaStream_t stream);
 
 namespace segmented_topp_impl {
 enum DType_t {
@@ -111,5 +128,14 @@ int topPPerSegment(const TopKPerSegmentContext &context,
                    size_t &temp_storage_bytes,
                    cudaStream_t stream);
 } // namespace segmented_topp_impl
+
+void invokeComputeToppDecay(float *runtime_top_p,
+                            const float *runtime_initial_top_p,
+                            const int *output_ids,
+                            const float *top_p_decay,
+                            const float *top_p_min,
+                            const int32_t *top_p_reset_ids,
+                            const int local_batch_size,
+                            cudaStream_t stream);
 
 } // namespace space_llm

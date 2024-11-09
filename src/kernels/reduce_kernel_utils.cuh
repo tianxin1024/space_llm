@@ -211,6 +211,52 @@ __inline__ __device__ T blockReduceMaxV2(T *val) {
     return (T)0.0f;
 }
 
+template <typename T, int MAX_K>
+struct TopK {
+    int p[MAX_K];
+    T u[MAX_K];
+
+    __device__ __forceinline__ void insert(T elem, int elem_id) {
+        if (elem > u[MAX_K - 1] || (p[MAX_K - 1] == -1) || ((elem == u[MAX_K - 1]) && (elem_id < p[MAX_K - 1])))
+        // if (elem > u[MAX_K-1] || ((elem == u[MAX_K-1]) && (elem_id < p[MAX_K-1])))
+        {
+            u[MAX_K - 1] = elem;
+            p[MAX_K - 1] = elem_id;
+        }
+
+        for (int k = MAX_K - 2; k >= 0; --k) {
+            if ((u[k + 1] > u[k]) || (p[k] == -1) || ((u[k + 1] == u[k]) && (p[k + 1] < p[k])))
+            // if ((u[k+1] > u[k]) || ((u[k+1] == u[k])&&(p[k+1] < p[k])))
+            {
+                T u2 = u[k];
+                int p2 = p[k];
+                u[k] = u[k + 1];
+                p[k] = p[k + 1];
+                u[k + 1] = u2;
+                p[k + 1] = p2;
+            }
+        }
+    }
+
+    __device__ __forceinline__ void init() {
+        const bool IS_FP16 = std::is_same<T, half>::value;
+        const T MAX_T_VAL = (IS_FP16) ? HALF_FLT_MAX : FLT_MAX;
+
+        for (int i = 0; i < MAX_K; i++) {
+            p[i] = -1;
+            u[i] = -MAX_T_VAL;
+        }
+    }
+};
+
+template <typename T, int MAX_K>
+__device__ __forceinline__ TopK<T, MAX_K> reduce_topk_op(const TopK<T, MAX_K> &a, const TopK<T, MAX_K> &b) {
+    TopK<T, MAX_K> res = a;
+    for (int i = 0; i < MAX_K; ++i)
+        res.insert(b.u[i], b.p[i]);
+    return res;
+}
+
 template <typename T>
 struct TopK_2 {
     int p = -1;
