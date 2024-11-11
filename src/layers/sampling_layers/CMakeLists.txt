@@ -10,4 +10,9 @@ set_property(TARGET TopKSamplingLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET TopKSamplingLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(TopKSamplingLayer PUBLIC -lcudart BaseSamplingLayer sampling_topk_kernels)
 
+add_library(TopPSamplingLayer STATIC TopPSamplingLayer.cu)
+set_property(TARGET TopPSamplingLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET TopPSamplingLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(TopPSamplingLayer PUBLIC -lcudart BaseSamplingLayer sampling_topp_kernels)
+
 

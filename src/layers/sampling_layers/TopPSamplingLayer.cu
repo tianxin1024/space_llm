@@ -1,4 +1,5 @@
 #include "layers/sampling_layers/TopPSamplingLayer.h"
+#include "kernels/sampling_topp_kernels.h"
 
 namespace space_llm {
 
@@ -120,7 +121,7 @@ void TopPSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     *   \param  top_p_reset_ids [batch_size] on gpu, uint32, optional
     **/
 
-    FT_LOG_DEBUG(__PRETTY_FUNCTION__);
+    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     BaseSamplingLayer<T>::setup(batch_size, beam_width, runtime_args);
     const Tensor runtime_top_p = runtime_args->isExist("runtime_top_p") ? runtime_args->at("runtime_top_p") : Tensor();
     const size_t runtime_top_p_size = runtime_top_p.size();
@@ -136,5 +137,8 @@ void TopPSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     const size_t runtime_top_k_size = runtime_top_k.size();
     // TODO ...
 }
+
+template class TopPSamplingLayer<float>;
+template class TopPSamplingLayer<half>;
 
 } // namespace space_llm
