@@ -371,6 +371,7 @@ void ParallelGptContextDecoder<T>::forward(
             }
 
             if (layernorm_type_ == LayerNormType::pre_layernorm) {
+                // TODO tianxin debug
                 invokeGeneralLayerNorm(decoder_normed_input_,
                                        decoder_input,
                                        layer_weight->pre_layernorm_weights.gamma,

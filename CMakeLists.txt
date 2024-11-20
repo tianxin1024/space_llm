@@ -35,7 +35,6 @@ include_directories(${CUDA_HEADER_DIRS})
 link_directories(${COMMON_LIB_DIRS})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
-include_directories(${PROJECT_SOURCE_DIR}/src)
 
 add_subdirectory(src)
 add_subdirectory(tests)

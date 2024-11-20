@@ -634,11 +634,6 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
         handleOptArg(&input_map, "end_id", end_ids_buf_, end_id_, batch_size);
     }
 
-    // if (gpt_variant_params_.use_attention_linear_bias) {
-    //     QK_LOG_INFO("build alibi slopes");
-    //     invokeBuildAlibiSlopes(linear_bias_slopes_, head_num_, stream_);
-    // }
-
     // continue_gen == false
     if (continue_gen) {
     } else {
@@ -857,6 +852,7 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
                  {"last_token_hidden_units",
                   Tensor(MEMORY_GPU, data_type, {batch_size * beam_width, hidden_units_}, decoder_output_buf_)}});
 
+            // TODO tianxin debug
             gpt_context_decoder_->forward(
                 &decoder_output_tensors, &decoder_input_tensors, &gpt_weights->decoder_layer_weights);
 
