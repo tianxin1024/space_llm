@@ -664,19 +664,18 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
         bool use_shared_contexts = (shared_contexts_ratio_ > 0.0f) && (max_input_length >= 1) && (batch_size > 1);
         QK_LOG_INFO("find context dups");
         if (use_shared_contexts) {
-            // TODO ...
-            // invokeFindContextDups(shared_contexts_idx_,
-            //                       batch_to_compact_idx_,
-            //                       compact_idx_,
-            //                       compact_size_,
-            //                       input_tensors->at("input_ids").getPtr<int>(),
-            //                       batch_size,
-            //                       beam_width,
-            //                       max_input_length,
-            //                       stream_);
-            // cudaD2Hcpy(&compact_size, compact_size_, 1);
-            // use_shared_contexts = compact_size <= shared_contexts_ratio_ * batch_size;
-            // sync_check_cuda_error();
+            invokeFindContextDups(shared_contexts_idx_,
+                                  batch_to_compact_idx_,
+                                  compact_idx_,
+                                  compact_size_,
+                                  input_tensors->at("input_ids").getPtr<int>(),
+                                  batch_size,
+                                  beam_width,
+                                  max_input_length,
+                                  stream_);
+            cudaD2Hcpy(&compact_size, compact_size_, 1);
+            use_shared_contexts = compact_size <= shared_contexts_ratio_ * batch_size;
+            sync_check_cuda_error();
         }
 
         // NOTE: p/prompt-tuning process here (lookup prompt embedding tables by task name ids)

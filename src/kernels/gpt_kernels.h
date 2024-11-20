@@ -105,15 +105,15 @@ void invokeTileGptInputs(int *tiled_input_ids,
                          const int max_input_length,
                          cudaStream_t stream);
 
-// void invokeFindContextDups(int *shared_contexts,
-//                            int *batch_to_compact,
-//                            int *compact_to_batch,
-//                            int *compact_size,
-//                            const int *input_ids,
-//                            const size_t batch_size,
-//                            const size_t beam_width,
-//                            const size_t input_seq_len,
-//                            cudaStream_t stream = 0);
+void invokeFindContextDups(int *shared_contexts,
+                           int *batch_to_compact,
+                           int *compact_to_batch,
+                           int *compact_size,
+                           const int *input_ids,
+                           const size_t batch_size,
+                           const size_t beam_width,
+                           const size_t input_seq_len,
+                           cudaStream_t stream = 0);
 
 template <typename T>
 void handleOptArg(TensorMap *input_tensors, const std::string &arg_name, T *d_ptr, T default_value, size_t size) {
