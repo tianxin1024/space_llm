@@ -866,15 +866,15 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
             }
 
             QK_LOG_INFO("decoding init");
-            // invokeDecodingInitialize(finished_buf_,
-            //                          sequence_lengths_,
-            //                          nullptr,
-            //                          cum_log_probs_,
-            //                          start_ids_buf_,
-            //                          batch_size,
-            //                          beam_width,
-            //                          max_input_length - 1,
-            //                          stream_);
+            invokeDecodingInitialize(finished_buf_,
+                                     sequence_lengths_,
+                                     nullptr,
+                                     cum_log_probs_,
+                                     start_ids_buf_,
+                                     batch_size,
+                                     beam_width,
+                                     max_input_length - 1,
+                                     stream_);
 
             if (is_return_context_cum_log_probs) {
                 QK_LOG_INFO("compute context cumulative log probs");
@@ -1249,7 +1249,7 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
                 }
 
                 QK_LOG_INFO("result sampling and stop check");
-                // dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
+                dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
                 generation_should_stop &= subbatch_should_stop;
                 microbatch_should_stop_[ite] = subbatch_should_stop;
             } else {
