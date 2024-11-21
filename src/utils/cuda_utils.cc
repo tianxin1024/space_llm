@@ -56,18 +56,17 @@ template void print_abs_mean(const int8_t *buf, uint size, cudaStream_t stream, 
 template <typename T>
 void print_to_screen(const T *result, const int size) {
     if (result == nullptr) {
-        QK_LOG_WARNING("It is an nullptr, skip!\n");
+        QK_LOG_WARNING("It is an nullptr, skip! \n");
         return;
     }
-
     T *tmp = reinterpret_cast<T *>(malloc(sizeof(T) * size));
     check_cuda_error(cudaMemcpy(tmp, result, sizeof(T) * size, cudaMemcpyDeviceToHost));
-
     for (int i = 0; i < size; ++i) {
         printf("%d, %f\n", i, static_cast<float>(tmp[i]));
     }
     free(tmp);
 }
+
 template void print_to_screen(const float *result, const int size);
 template void print_to_screen(const half *result, const int size);
 template void print_to_screen(const int *result, const int size);

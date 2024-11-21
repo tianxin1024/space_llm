@@ -2,6 +2,7 @@
 #include "kernels/gpt_kernels.h"
 #include "models/gpt/GptContextDecoder.h"
 #include "layers/attention_layers/TensorParallelGptContextAttentionLayer.h"
+#include "utils/cuda_utils.h"
 
 namespace space_llm {
 

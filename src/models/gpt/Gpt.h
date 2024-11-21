@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utils/memory_utils.h"
+#include "utils/cuda_utils.h"
 #include "utils/prompt_learning.h"
 #include "layers/BaseLayer.h"
 #include "layers/DynamicDecodeLayer.h"
