@@ -21,6 +21,9 @@ all :
 build:
 	@$(CMAKE_MAKE) && make -s -j$(NUM_JOBS)
 
+debug_cuda:
+	@cd debug/gpt && cuda-gdb -x ./cuda_gpt_demo.gdb
+
 run :
 	@cd build/bin && ./$(PRO) 
 
@@ -60,4 +63,4 @@ check-python:
 clean:
 	read -r -p "This will delete the contents of build/*. Are you sure? [CRAL-C to abort]" response && rm -rf build/*
 
-.PHONY: all run debug test clean check-python
+.PHONY: all run debug debug_cuda test clean check-python

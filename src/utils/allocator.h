@@ -54,7 +54,7 @@ public:
             }
 #endif
             else {
-                QK_LOG_DEBUG("Reuse original buffer %p with size %d and do nothing for reMalloc.", void_ptr, size);
+                // QK_LOG_DEBUG("Reuse original buffer %p with size %d and do nothing for reMalloc.", void_ptr, size);
                 if (is_set_zero) {
                     memSet(void_ptr, 0, size);
                 }
@@ -171,7 +171,7 @@ public:
         if (*ptr != nullptr) {
             int o_device = 0;
             if (pointer_mapping_->count(address)) {
-                QK_LOG_DEBUG("Free buffer %p", address);
+                // QK_LOG_DEBUG("Free buffer %p", address);
                 check_cuda_error(getSetDevice(device_id_, &o_device));
                 if (is_host) {
                     check_cuda_error(cudaFreeHost(*ptr));
