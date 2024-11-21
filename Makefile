@@ -1,6 +1,6 @@
 NUM_JOBS = $(shell nproc)
 CXX      = g++
-PRO      = demo
+PRO      = gpt_demo
 
 SPACE   ?= $(PWD)
 LIBDIR  ?= $(SPACE)/lib
@@ -22,7 +22,7 @@ build:
 	@$(CMAKE_MAKE) && make -s -j$(NUM_JOBS)
 
 run :
-	# @cd build/bin && ./$(PRO) 
+	@cd build/bin && ./$(PRO) 
 
 debug :
 	@cd build/bin && gdb -x ./init.gdb

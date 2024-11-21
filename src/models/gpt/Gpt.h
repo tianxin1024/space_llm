@@ -3,12 +3,17 @@
 #include "utils/memory_utils.h"
 #include "utils/prompt_learning.h"
 #include "layers/BaseLayer.h"
+#include "layers/DynamicDecodeLayer.h"
 #include "layers/attention_layers/BaseAttentionLayer.h"
+#include "models/gpt/GptContextDecoder.h"
+#include "models/gpt/GptDecoder.h"
+#include "models/gpt/GptDecoderLayerWeight.h"
+#include "models/gpt/GptWeight.h"
 
 namespace space_llm {
 
 template <typename T>
-class ParallelGpt : public BaseLayer {
+class Gpt : public BaseLayer {
 private:
     // meta data
     size_t head_num_;
@@ -56,9 +61,9 @@ private:
     // GPT Variants parameters: e.g. Meta OPT
     gptVariantParams gpt_variant_params_;
 
-    ParallelGptDecoder<T> *gpt_decoder_;
-    ParallelGptContextDecoder<T> *gpt_context_decoder_;
-    // DynamicDecodeLayer<float> *dynamic_decode_layer_;
+    GptDecoder<T> *gpt_decoder_;
+    GptContextDecoder<T> *gpt_context_decoder_;
+    DynamicDecodeLayer<float> *dynamic_decode_layer_;
 
     void allocateBuffer() override;
     void allocateBuffer(size_t batch_size,
@@ -136,52 +141,52 @@ protected:
     float *lp_logprob_buf_ = nullptr;
 
 public:
-    ParallelGpt(size_t max_batch_size,
-                size_t max_seq_len,
-                size_t max_input_len,
-                size_t beam_width,
-                size_t head_num,
-                size_t size_per_head,
-                size_t inter_size,
-                size_t num_layer,
-                size_t expert_num,
-                size_t moe_k,
-                std::vector<int64_t> moe_layer_index,
-                size_t vocab_size,
-                int start_id,
-                int end_id,
-                int prompt_learning_start_id, // only needed by p/prompt-tuning
-                PromptLearningType prompt_learning_type,
-                gptVariantParams gpt_variant_params,
-                float beam_search_diversity_rate,
-                size_t top_k,
-                float top_p,
-                unsigned long long random_seed,
-                float temperature,
-                float len_penalty,
-                float repetition_penalty,
-                cudaStream_t stream,
-                cublasMMWrapper *cublas_wrapper,
-                IAllocator *allocator,
-                bool is_free_buffer_after_forward,
-                cudaDeviceProp *cuda_device_prop = nullptr,
-                AttentionType attention_type = AttentionType::UNFUSED_MHA,
-                bool sparse = false,
-                int int8_mode = 0,
-                int enable_custom_all_reduce = 0,
-                float shared_contexts_ratio = 1.0f);
+    Gpt(size_t max_batch_size,
+        size_t max_seq_len,
+        size_t max_input_len,
+        size_t beam_width,
+        size_t head_num,
+        size_t size_per_head,
+        size_t inter_size,
+        size_t num_layer,
+        size_t expert_num,
+        size_t moe_k,
+        std::vector<int64_t> moe_layer_index,
+        size_t vocab_size,
+        int start_id,
+        int end_id,
+        int prompt_learning_start_id, // only needed by p/prompt-tuning
+        PromptLearningType prompt_learning_type,
+        gptVariantParams gpt_variant_params,
+        float beam_search_diversity_rate,
+        size_t top_k,
+        float top_p,
+        unsigned long long random_seed,
+        float temperature,
+        float len_penalty,
+        float repetition_penalty,
+        cudaStream_t stream,
+        cublasMMWrapper *cublas_wrapper,
+        IAllocator *allocator,
+        bool is_free_buffer_after_forward,
+        cudaDeviceProp *cuda_device_prop = nullptr,
+        AttentionType attention_type = AttentionType::UNFUSED_MHA,
+        bool sparse = false,
+        int int8_mode = 0,
+        int enable_custom_all_reduce = 0,
+        float shared_contexts_ratio = 1.0f);
 
-    ParallelGpt(ParallelGpt<T> const &gpt);
+    Gpt(Gpt<T> const &gpt);
 
-    ~ParallelGpt();
+    ~Gpt();
 
     void forward(std::vector<Tensor> *output_tensors,
                  const std::vector<Tensor> *input_tensors,
-                 const ParallelGptWeight<T> *gpt_weights);
+                 const GptWeight<T> *gpt_weights);
 
     void forward(std::unordered_map<std::string, Tensor> *output_tensors,
                  const std::unordered_map<std::string, Tensor> *input_tensors,
-                 const ParallelGptWeight<T> *gpt_weights);
+                 const GptWeight<T> *gpt_weights);
 };
 
 } // namespace space_llm
