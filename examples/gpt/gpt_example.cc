@@ -317,5 +317,93 @@ void gpt_example(const INIReader reader) {
     }
     cudaDeviceSynchronize();
 
-    printf("-----------------------\n");
+    struct timeval start, end;
+    cudaDeviceSynchronize();
+    gettimeofday(&start, NULL);
+
+    ite = 10;
+    QK_LOG_INFO("total time");
+    for (int i = 0; i < ite; ++i) {
+        gpt.forward(&output_tensors, &input_tensors, &gpt_weights);
+    }
+
+    cudaDeviceSynchronize();
+    gettimeofday(&end, NULL);
+
+    cudaProfilerStop();
+
+    printf("[INFO] \n\trequest_batch_size %ld\n\tbeam_width %ld\n\thead_num %ld\n\tsize_per_head %ld\n\ttotal_output_len %d\n "
+           "\tdecoder_layers %ld\n\tvocab_size %ld\n\tFT-CPP-decoding-beamsearch-time% .2f ms\n ",
+           request_batch_size, beam_width, head_num, size_per_head, total_output_len,
+           decoder_layers, vocab_size, ((end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) * 0.001) / ite);
+
+    if (rank == 0) {
+        std::string fName = "out";
+        auto outFile = std::ofstream(fName, std::ios::out);
+        if (!outFile.is_open()) {
+            printf("[WARNING] Cannot write results into output file %s \n",
+                   fName.c_str());
+        } else {
+            size_t outCount = total_output_len * request_batch_size * beam_width;
+            int *hBuf = new int[outCount];
+            cudaD2Hcpy(hBuf,
+                       d_output_ids, outCount);
+
+            {
+                std::cout << "Writing " << outCount << " elements\n";
+                int zeroCount = 0;
+                for (size_t i = 0; i < outCount; i++) {
+                    if (hBuf[i] == int(0)) {
+                        zeroCount++;
+                    }
+                    outFile << hBuf[i] << " ";
+                    if ((i + 1) % (total_output_len) == 0) {
+                        outFile << std::endl;
+                    }
+
+                    if (i < 10) {
+                        printf("%5d ", hBuf[i]);
+                    }
+                    if ((i + 1) % (total_output_len) == 0 && i < 10) {
+                        std::cout << std::endl;
+                    }
+                }
+                std::cout << std::endl
+                          << "zeroCount = " << zeroCount << std::endl;
+            }
+            delete[] hBuf;
+        }
+        outFile.close();
+
+        if (d_cum_log_probs != nullptr) {
+            std::string logprob_fname = "logprob.out";
+            std::ofstream logprob_file = std::ofstream("logprob.out",
+                                                       std::ios::out);
+            if (!logprob_file.is_open()) {
+                printf("[WARNING] Cannot write results into output file %s \n",
+                       logprob_fname.c_str());
+            } else {
+                size_t cum_log_probs_size = request_batch_size * beam_width;
+                printf("[INFO] Writing %ld elements (log probs)\n",
+                       cum_log_probs_size);
+                float *h_buf = new float[cum_log_probs_size];
+                cudaD2Hcpy(h_buf, d_cum_log_probs,
+                           cum_log_probs_size);
+                for (size_t i = 0; i < cum_log_probs_size;
+                     i++) {
+                    logprob_file << h_buf[i] << std::endl;
+                    if (i < 10) {
+                        printf(" %10.6f\n", h_buf[i]);
+                    }
+                }
+                delete[] h_buf;
+            }
+            logprob_file.close();
+        }
+    }
+
+    delete cublas_algo_map;
+    delete cublas_wrapper_mutex;
+
+    return;
 }
