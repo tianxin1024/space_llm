@@ -1,5 +1,4 @@
 #include "models/multi_gpu_gpt/ParallelGptDecoder.h"
-#include "layers/attention_layers/TensorParallelReluFfnLayer.h"
 
 namespace space_llm {
 
@@ -21,7 +20,21 @@ void ParallelGptDecoder<T>::initialize() {
     bool use_gated_activation = activation_type_ == ActivationType::GeGLU || activation_type_ == ActivationType::ReGLU;
     size_t max_inter_size = has_adapters_ ? std::max(inter_size_, adapter_inter_size_) : inter_size_;
     if (activation_type_ == ActivationType::Gelu || activation_type_ == ActivationType::GeGLU) {
-        // TODO ...
+        ffn_layer_ = new TensorParallelGeluFfnLayer<T>(max_batch_size_,
+                                                       1,
+                                                       head_num_,
+                                                       size_per_head_,
+                                                       expert_num_, // expert_num
+                                                       max_inter_size,
+                                                       stream_,
+                                                       cublas_wrapper_,
+                                                       allocator_,
+                                                       true,
+                                                       is_free_buffer_after_forward_,
+                                                       sparse_,
+                                                       int8_mode_,
+                                                       use_gated_activation);
+
     } else if (activation_type_ == ActivationType::Relu || activation_type_ == ActivationType::ReGLU) {
         ffn_layer_ = new TensorParallelReluFfnLayer<T>(max_batch_size_,
                                                        1,

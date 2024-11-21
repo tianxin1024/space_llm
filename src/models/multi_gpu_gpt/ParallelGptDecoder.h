@@ -8,6 +8,8 @@
 #include "layers/ffnLayer.h"
 #include "models/multi_gpu_gpt/ParallelGptDecoderLayerWeight.h"
 #include "layers/attention_layers/TensorParallelDecoderSelfAttentionLayer.h"
+#include "layers/attention_layers/TensorParallelReluFfnLayer.h"
+#include "layers/attention_layers/TensorParallelGeluFfnLayer.h"
 
 namespace space_llm {
 

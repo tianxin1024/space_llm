@@ -20,7 +20,7 @@ target_link_libraries(ParallelGptDecoder PUBLIC -lcudart
 add_library(ParallelGptContextDecoder STATIC ParallelGptContextDecoder.cc)
 set_property(TARGET ParallelGptDecoder PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET ParallelGptDecoder PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
-target_link_libraries(ParallelGptContextDecoder PUBLIC -lcudart TensorParallelReluFfnLayer 
+target_link_libraries(ParallelGptContextDecoder PUBLIC -lcudart TensorParallelReluFfnLayer TensorParallelGeluFfnLayer  
                                                 TensorParallelGptContextAttentionLayer layernorm_kernels
                                                 add_residual_kernels preprocess_kernels gpt_kernels tensor
                                                 cuda_utils logger)
