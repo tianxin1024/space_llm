@@ -431,6 +431,18 @@ public:
         return default_value;
     }
 
+    inline std::unordered_map<std::string, Tensor> getMap() const {
+        return tensor_map_;
+    }
+
+    inline std::unordered_map<std::string, Tensor>::iterator begin() {
+        return tensor_map_.begin();
+    }
+
+    inline std::unordered_map<std::string, Tensor>::iterator end() {
+        return tensor_map_.end();
+    }
+
     std::string toString();
 
 }; // class TensorMap

@@ -47,3 +47,7 @@ add_library(sampling_topp_kernels STATIC sampling_topp_kernels.cu)
 set_property(TARGET sampling_topp_kernels PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET sampling_topp_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 
+add_library(ban_bad_words STATIC ban_bad_words.cu)
+set_property(TARGET ban_bad_words PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET ban_bad_words PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+

@@ -1,6 +1,7 @@
 #include "layers/DynamicDecodeLayer.h"
 #include "layers/sampling_layers/TopKSamplingLayer.h"
 #include "layers/sampling_layers/TopPSamplingLayer.h"
+#include "kernels/ban_bad_words.h"
 
 namespace space_llm {
 
@@ -232,6 +233,224 @@ void DynamicDecodeLayer<T>::forward(TensorMap *output_tensors,
             shared_bad_words ? bad_words_ptr : bad_words.getPtrWithOffset<const int>(ite * local_batch_size * 2 * bad_words_len),
             shared_bad_words, bad_words_len, id_offset, vocab_size_padded_, step,
             stream_);
+    }
+
+    // dynamic decode GPT
+    if (beam_width > 1) {
+        // Because we still not support batch beam search now, so we need to compute
+        // one by one if there are different runtime arguments.
+        const size_t dynamic_decode_batch_size =
+            has_diff_runtime_args_ ? 1 : local_batch_size;
+        const int dynamic_decode_total_iteration =
+            local_batch_size / dynamic_decode_batch_size;
+
+        for (uint dynamic_ite = ite * dynamic_decode_total_iteration;
+             dynamic_ite < (ite + 1) * dynamic_decode_total_iteration;
+             ++dynamic_ite) {
+            const int dynamic_id_offset =
+                dynamic_ite * dynamic_decode_batch_size * beam_width;
+            const int dynamic_decode_vocab_size_units_offset =
+                dynamic_id_offset * vocab_size_padded_;
+
+            // common inputs
+            Tensor logits = input_tensors->at("logits");
+            Tensor end_id = input_tensors->at("end_id");
+
+            TensorMap dynamic_decode_input_tensors(
+                {{"logits", Tensor{logits.where,
+                                   logits.type,
+                                   {dynamic_decode_batch_size, logits.shape[1],
+                                    logits.shape[2]},
+                                   logits.getPtrWithOffset(
+                                       dynamic_decode_vocab_size_units_offset)}},
+                 {"step", input_tensors->at("step")},
+                 {"max_input_length", input_tensors->at("max_input_length")},
+                 {"end_id", Tensor{end_id.where,
+                                   end_id.type,
+                                   {dynamic_decode_batch_size},
+                                   end_id.getPtrWithOffset(
+                                       dynamic_ite * dynamic_decode_batch_size)}},
+                 {"ite", Tensor{MEMORY_CPU, TYPE_UINT32, {1}, &dynamic_ite}}});
+
+            if (input_tensors->isExist("embedding_bias")) {
+                dynamic_decode_input_tensors.insert(
+                    {"embedding_bias", input_tensors->at("embedding_bias")});
+            }
+            if (input_tensors->isExist("input_lengths")) {
+                Tensor input_lengths = input_tensors->at("input_lengths");
+                dynamic_decode_input_tensors.insert(
+                    {"input_lengths", input_lengths.slice({dynamic_decode_batch_size,
+                                                           input_lengths.shape[1]},
+                                                          dynamic_id_offset)});
+            }
+            for (auto t = input_tensors->begin(); t != input_tensors->end(); ++t) {
+                if (t->first.find("random_seed") == std::string::npos) {
+                    dynamic_decode_input_tensors.insert(*t);
+                }
+            }
+
+            // common outputs
+            TensorMap dynamic_decode_output_tensors(
+                {{"output_ids", output_tensors->at("output_ids")}});
+            if (output_tensors->isExist("sequence_length")) {
+                Tensor sequence_length = output_tensors->at("sequence_length");
+                dynamic_decode_output_tensors.insert(
+                    {"sequence_length",
+                     Tensor{sequence_length.where,
+                            sequence_length.type,
+                            {dynamic_decode_batch_size * beam_width},
+                            sequence_length.getPtrWithOffset(dynamic_id_offset)}});
+            }
+            if (output_tensors->isExist("finished")) {
+                Tensor finished = output_tensors->at("finished");
+                dynamic_decode_output_tensors.insert(
+                    {"finished", Tensor{finished.where,
+                                        finished.type,
+                                        {dynamic_decode_batch_size * beam_width},
+                                        finished.getPtrWithOffset(dynamic_id_offset)}});
+            }
+            if (output_tensors->isExist("cum_log_probs")) {
+                Tensor cum_log_probs = output_tensors->at("cum_log_probs");
+                dynamic_decode_output_tensors.insert(
+                    {"cum_log_probs",
+                     Tensor{cum_log_probs.where,
+                            cum_log_probs.type,
+                            {dynamic_decode_batch_size * beam_width},
+                            cum_log_probs.getPtrWithOffset(dynamic_id_offset)}});
+            }
+            if (output_tensors->isExist("beam_hyps")) {
+                dynamic_decode_output_tensors.insert("beam_hyps",
+                                                     output_tensors->at("beam_hyps"));
+            }
+
+            if (output_tensors->isExist("output_log_probs")) {
+                dynamic_decode_output_tensors.insert(
+                    {"output_log_probs", output_tensors->at("output_log_probs")});
+            }
+
+            dynamic_decode_input_tensors.insert(
+                {"src_cache_indirection",
+                 input_tensors->at("src_cache_indirection")});
+
+            dynamic_decode_output_tensors.insert(
+                {"parent_ids", output_tensors->at("parent_ids")});
+            dynamic_decode_output_tensors.insert(
+                {"tgt_cache_indirection",
+                 output_tensors->at("tgt_cache_indirection")});
+
+            QK_CHECK_WITH_INFO(dynamic_decode_output_tensors.isExist("cum_log_probs"),
+                               "cum_log_probs should be provided in beam search.");
+
+            if (true || beam_width < 16 || (output_tensors->isExist("beam_hyps") && input_tensors->getVal<float>("beam_search_diversity_rate", 0.0f) != 0.0f)) {
+                // only online_beamsearch_decode_ support beam_search_diversity_rate
+                // when beam_hyps is used
+                online_beamsearch_decode_->forward(&dynamic_decode_output_tensors,
+                                                   &dynamic_decode_input_tensors);
+            } else {
+                QK_CHECK(false); // deprecate this module
+                beamsearch_decode_->forward(&dynamic_decode_output_tensors,
+                                            &dynamic_decode_input_tensors);
+            }
+        }    // end of dynamic_ite
+    } else { // beam_width=1
+        // In sampling, we have supported batch sampling. So, we always compute all
+        // sentences once.
+        const size_t local_batch_offset = ite * local_batch_size * beam_width;
+
+        Tensor logits = input_tensors->at("logits");
+        Tensor end_id = input_tensors->at("end_id");
+
+        TensorMap decode_input_tensors(
+            {{"logits",
+              logits.slice({local_batch_size, beam_width, logits.shape[2]},
+                           local_batch_offset * logits.shape[2])},
+             {"step", input_tensors->at("step")},
+             {"max_input_length", input_tensors->at("max_input_length")},
+             {"end_id", end_id.slice({local_batch_size}, ite * local_batch_size)},
+             {"ite", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &ite}}});
+
+        if (input_tensors->isExist("embedding_bias")) {
+            decode_input_tensors.insert(
+                {"embedding_bias", input_tensors->at("embedding_bias")});
+        }
+        if (input_tensors->isExist("input_lengths")) {
+            Tensor input_lengths = input_tensors->at("input_lengths");
+            decode_input_tensors.insert(
+                {"input_lengths", input_lengths.slice({local_batch_size, beam_width},
+                                                      local_batch_offset)});
+        }
+
+        TensorMap decode_output_tensors(
+            {{"output_ids", output_tensors->at("output_ids")}});
+        if (output_tensors->isExist("sequence_length")) {
+            Tensor sequence_length = output_tensors->at("sequence_length");
+            decode_output_tensors.insert(
+                {"sequence_length",
+                 sequence_length.slice({local_batch_size * beam_width},
+                                       local_batch_offset)});
+        }
+        if (output_tensors->isExist("finished")) {
+            Tensor finished = output_tensors->at("finished");
+            decode_output_tensors.insert(
+                {"finished", finished.slice({local_batch_size * beam_width},
+                                            local_batch_offset)});
+        }
+        if (output_tensors->isExist("cum_log_probs")) {
+            Tensor cum_log_probs = output_tensors->at("cum_log_probs");
+            decode_output_tensors.insert(
+                {"cum_log_probs", cum_log_probs.slice({local_batch_size * beam_width},
+                                                      local_batch_offset)});
+        }
+        if (output_tensors->isExist("output_log_probs")) {
+            Tensor output_log_probs = output_tensors->at("output_log_probs");
+            int max_input_length =
+                input_tensors->at("max_input_length").getVal<int>();
+            size_t step_offset = (step - max_input_length) * batch_size * beam_width;
+            decode_output_tensors.insert(
+                {"output_log_probs",
+                 output_log_probs.slice(
+                     {output_log_probs.shape[0] - (step - max_input_length),
+                      local_batch_size * beam_width},
+                     step_offset + local_batch_offset)});
+        }
+
+        // Run topk / topp decode layers.
+        // Currently, we support batch sampling. If the runtime arguments are like
+        // topk = [4, 0, 4]. topp = [0.0, 0.5, 0.5]
+        // then topk_decode handles [4, x, 4 + 0.5]
+        //      topp_decode handles [x, 0.5, x]
+        // where "x" are skipped.
+        topk_decode_->forward(&decode_output_tensors, &decode_input_tensors);
+        topp_decode_->forward(&decode_output_tensors, &decode_input_tensors);
+    }
+
+    if (input_tensors->isExist("stop_words_list")) {
+        const size_t id_offset = ite * local_batch_size * beam_width;
+        const size_t stop_words_length =
+            input_tensors->at("stop_words_list").shape[2];
+
+        // invokeStopWordsCriterion(output_tensors->at("output_ids").getPtr<const
+        // int>(),
+        //                          output_tensors->at("parent_ids").getPtr<const
+        //                          int>(), input_tensors->at("stop_words_list")
+        //                              .getPtrWithOffset<const int>(ite *
+        //                              local_batch_size * 2 * stop_words_length),
+        //                          output_tensors->at("finished").getPtrWithOffset<bool>(id_offset),
+        //                          id_offset,
+        //                          stop_words_length,
+        //                          batch_size,
+        //                          beam_width,
+        //                          step,
+        //                          stream_);
+    }
+
+    if (input_tensors->isExist("sequence_limit_length")) {
+        // invokeLengthCriterion(
+        //     output_tensors->at("finished").getPtr<bool>(),
+        //     output_tensors->at("should_stop").getPtr<bool>(),
+        //     h_pinned_finished_sum_,
+        //     input_tensors->at("sequence_limit_length").getPtr<const uint32_t>(),
+        //     batch_size, beam_width, step, stream_);
     }
 }
 
