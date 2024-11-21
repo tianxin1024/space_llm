@@ -52,7 +52,6 @@ void TopPSamplingLayer<T>::allocateBuffer() {
 
 template <typename T>
 void TopPSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tensor top_p) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     BaseSamplingLayer<T>::allocateBuffer(batch_size, top_k, top_p);
     invokeTopPSampling<T>(nullptr, // workspace
                           sampling_workspace_size_,
@@ -89,7 +88,6 @@ void TopPSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tenso
 
 template <typename T>
 void TopPSamplingLayer<T>::freeBuffer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (is_allocate_buffer_) {
         allocator_->free((void **)(&sampling_workspace_));
         allocator_->free((void **)(&topp_id_vals_buf_));
@@ -121,7 +119,6 @@ void TopPSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     *   \param  top_p_reset_ids [batch_size] on gpu, uint32, optional
     **/
 
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     BaseSamplingLayer<T>::setup(batch_size, beam_width, runtime_args);
     const Tensor runtime_top_p = runtime_args->isExist("runtime_top_p") ? runtime_args->at("runtime_top_p") : Tensor();
     const size_t runtime_top_p_size = runtime_top_p.size();

@@ -25,7 +25,7 @@ run :
 	@cd build/bin && ./$(PRO) 
 
 debug :
-	@cd build/bin && gdb -x ./init.gdb
+	cd debug/gpt && gdb -x ./gpt_demo.gdb
 
 test_gemm:
 	@cd build/bin && ./test_gemm
@@ -60,4 +60,4 @@ check-python:
 clean:
 	read -r -p "This will delete the contents of build/*. Are you sure? [CRAL-C to abort]" response && rm -rf build/*
 
-.PHONY: all run test clean check-python
+.PHONY: all run debug test clean check-python

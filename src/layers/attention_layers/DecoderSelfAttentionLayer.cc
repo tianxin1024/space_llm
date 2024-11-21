@@ -174,7 +174,6 @@ void DecoderSelfAttentionLayer<T>::allocateBuffer() {
 template <typename T>
 void DecoderSelfAttentionLayer<T>::allocateBuffer(size_t batch_size) {
     const size_t type_size = int8_mode_ == 2 ? sizeof(int8_t) : sizeof(T);
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     qkv_buf_ =
         reinterpret_cast<T *>(allocator_->reMalloc(qkv_buf_, type_size * batch_size * 3 * local_hidden_units_, false));
     context_buf_ =
@@ -442,7 +441,6 @@ void DecoderSelfAttentionLayer<T>::forward(TensorMap *output_tensors,
     //      key_cache [batch, local_head_num, size_per_head // x, memory_max_len, x]
     //      value_cache [batch, local_head_num, memory_max_len, size_per_head]
 
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     QK_CHECK(output_tensors->at("key_cache").shape.size() == 5 || output_tensors->at("key_cache").shape.size() == 3);
     QK_CHECK(output_tensors->at("value_cache").shape.size() == 4
              || output_tensors->at("value_cache").shape.size() == 3);

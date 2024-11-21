@@ -7,7 +7,6 @@ namespace space_llm {
 
 template <typename T>
 void ParallelGptContextDecoder<T>::initialize() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     self_attention_layer_ = new TensorParallelGptContextAttentionLayer<T>(max_batch_size_,
                                                                           max_seq_len_,
                                                                           head_num_,
@@ -66,7 +65,6 @@ void ParallelGptContextDecoder<T>::allocateBuffer() {
 
 template <typename T>
 void ParallelGptContextDecoder<T>::allocateBuffer(size_t batch_size, size_t seq_len, bool use_shared_contexts) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     decoder_normed_input_ = reinterpret_cast<T *>(
         allocator_->reMalloc(decoder_normed_input_, sizeof(T) * batch_size * seq_len * hidden_units_, false));
     self_attn_output_ = reinterpret_cast<T *>(
@@ -122,7 +120,6 @@ void ParallelGptContextDecoder<T>::allocateBuffer(size_t batch_size, size_t seq_
 template <typename T>
 void ParallelGptContextDecoder<T>::freeBuffer() {
     if (is_allocate_buffer_) {
-        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
         allocator_->free((void **)(&decoder_normed_input_));
         allocator_->free((void **)(&self_attn_output_));
         if (has_adapters_) {
@@ -250,7 +247,6 @@ void ParallelGptContextDecoder<T>::forward(
     // For example, the shape of decoder_input becomes [ite, batch_size, seq_len, hidden_dimension] during
     // computing.
 
-    QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
     QK_CHECK(input_tensors->isExist("decoder_input"));
     QK_CHECK(input_tensors->isExist("attention_mask"));
     QK_CHECK(input_tensors->isExist("input_lengths"));
@@ -677,7 +673,6 @@ void ParallelGptContextDecoder<T>::forward(
     if (is_free_buffer_after_forward_ == true) {
         freeBuffer();
     }
-    QK_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template <typename T>

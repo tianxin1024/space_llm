@@ -36,7 +36,6 @@ protected:
 public:
     template <typename T>
     void *reMalloc(T *ptr, size_t size, const bool is_set_zero = true, bool is_host = false) {
-        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
         size = ((size + 31) / 32) * 32; // make the buffer align with 32 bytes
         void *void_ptr = (void *)ptr;
         void *ptr_address = getAddress(void_ptr);
@@ -91,7 +90,6 @@ private:
 public:
     Allocator(int device_id) :
         device_id_(device_id) {
-        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
         pointer_mapping_ = new std::unordered_map<void *, size_t>();
 #if defined(CUDA_MEMORY_POOL_DISABLED)
         QK_LOG_WARNING(
@@ -126,7 +124,6 @@ public:
     }
 
     virtual ~Allocator() {
-        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
         while (!pointer_mapping_->empty()) {
             free((void **)(&pointer_mapping_->begin()->first));
         }
@@ -142,7 +139,6 @@ public:
     };
 
     void *malloc(size_t size, const bool is_set_zero = true, bool is_host = false) {
-        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
         if (size == 0) {
             return nullptr;
         }
@@ -171,7 +167,6 @@ public:
     }
 
     void free(void **ptr, bool is_host = false) const {
-        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
         void *address = getAddress(*ptr);
         if (*ptr != nullptr) {
             int o_device = 0;

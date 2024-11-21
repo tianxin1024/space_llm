@@ -41,7 +41,6 @@ TopKSamplingLayer<T>::TopKSamplingLayer(TopKSamplingLayer<T> const &top_k_sampli
 
 template <typename T>
 TopKSamplingLayer<T>::~TopKSamplingLayer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     freeBuffer();
 }
 
@@ -52,7 +51,6 @@ void TopKSamplingLayer<T>::allocateBuffer() {
 
 template <typename T>
 void TopKSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tensor top_p) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     BaseSamplingLayer<T>::allocateBuffer(batch_size, top_k, top_p);
     uint max_top_k = top_k.size() > 0 ? top_k.max<uint>() : 1;
     if (max_top_k == 0) {
@@ -82,7 +80,6 @@ void TopKSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tenso
 
 template <typename T>
 void TopKSamplingLayer<T>::freeBuffer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (is_allocate_buffer_) {
         allocator_->free((void **)(&sampling_workspace_));
         allocator_->free((void **)(&runtime_top_k_buf_));

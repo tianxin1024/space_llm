@@ -19,7 +19,6 @@ void UnfusedAttentionLayer<T>::forward(TensorMap *output_tensors,
     //       attentions [batch, num_layer, head_num, seqlen, seqlen] (optional)
     // If padding_offset.data is nullptr, then not remove padding
 
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     const size_t request_batch_size = input_tensors->at("attention_mask").shape[0];
     const size_t request_seq_len = input_tensors->at("attention_mask").shape[2];
     const bool output_attentions = output_tensors->isExist("attentions");
@@ -265,7 +264,6 @@ UnfusedAttentionLayer<T>::UnfusedAttentionLayer(UnfusedAttentionLayer<T> const &
 
 template <typename T>
 UnfusedAttentionLayer<T>::~UnfusedAttentionLayer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     cublas_wrapper_ = nullptr;
     freeBuffer();
 }
@@ -277,7 +275,6 @@ void UnfusedAttentionLayer<T>::allocateBuffer() {
 
 template <typename T>
 void UnfusedAttentionLayer<T>::allocateBuffer(size_t batch_size, size_t seq_len) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     q_buf_ = (T *)allocator_->reMalloc(q_buf_, sizeof(T) * batch_size * seq_len * hidden_units_, false);
     k_buf_ = (T *)allocator_->reMalloc(k_buf_, sizeof(T) * batch_size * seq_len * hidden_units_, false);
     v_buf_ = (T *)allocator_->reMalloc(v_buf_, sizeof(T) * batch_size * seq_len * hidden_units_, false);
@@ -295,7 +292,6 @@ void UnfusedAttentionLayer<T>::allocateBuffer(size_t batch_size, size_t seq_len)
 
 template <typename T>
 void UnfusedAttentionLayer<T>::freeBuffer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (is_allocate_buffer_) {
         allocator_->free((void **)(&q_buf_));
         allocator_->free((void **)(&k_buf_));

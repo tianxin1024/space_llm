@@ -105,7 +105,6 @@ struct Tensor {
 
     template <typename T>
     inline T getVal(size_t index) const {
-        QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
         QK_CHECK(where == MEMORY_CPU);
         QK_CHECK(data != nullptr);
         QK_CHECK_WITH_INFO(index < size(), "index is larger than buffer size");
@@ -120,7 +119,6 @@ struct Tensor {
 
     template <typename T>
     inline T getVal() const {
-        QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
         if (getTensorType<T>() != type) {
             QK_LOG_DEBUG("getVal with type %s, but data type is: %s",
                          getNumpyTypeDesc(getTensorType<T>()).c_str(),
@@ -131,7 +129,6 @@ struct Tensor {
 
     template <typename T>
     inline T *getPtr() const {
-        QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
         if (getTensorType<T>() != type) {
             QK_LOG_DEBUG("getPtr with type %s, but data type is: %s",
                          getNumpyTypeDesc(getTensorType<T>()).c_str(),
@@ -141,7 +138,6 @@ struct Tensor {
     }
 
     inline void *getPtrWithOffset(size_t offset) const {
-        QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
         if (data == nullptr) {
             return (void *)data;
         } else {
@@ -152,7 +148,6 @@ struct Tensor {
 
     template <typename T>
     inline T *getPtrWithOffset(size_t offset) const {
-        QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
         if (getTensorType<T>() != type) {
             QK_LOG_DEBUG("getVal with type %s, but data type is: %s",
                          getNumpyTypeDesc(getTensorType<T>()).c_str(),
@@ -289,7 +284,6 @@ public:
     }
 
     inline bool isExist(const std::string &key) const {
-        QK_LOG_DEBUG("%s for key: %s", __PRETTY_FUNCTION__, key.c_str());
         return tensor_map_.find(key) != tensor_map_.end();
     }
 
@@ -316,7 +310,6 @@ public:
     Tensor at(size_t tmp) = delete;
 
     inline Tensor &at(const std::string &key) {
-        QK_LOG_DEBUG("%s for key %s", __PRETTY_FUNCTION__, key.c_str());
         QK_CHECK_WITH_INFO(isExist(key),
                            fmtstr("Cannot find a tensor of name %s in the tensor map (keys: %s)",
                                   key.c_str(),
@@ -333,7 +326,6 @@ public:
     }
 
     inline Tensor &at(const std::string &key, Tensor &default_tensor) {
-        QK_LOG_DEBUG("%s for key %s", __PRETTY_FUNCTION__, key.c_str());
         if (isExist(key)) {
             return tensor_map_.at(key);
         }
@@ -341,7 +333,6 @@ public:
     }
 
     inline Tensor at(const std::string &key, Tensor &default_tensor) const {
-        QK_LOG_DEBUG("%s for key %s", __PRETTY_FUNCTION__, key.c_str());
         if (isExist(key)) {
             return tensor_map_.at(key);
         }
@@ -349,7 +340,6 @@ public:
     }
 
     inline Tensor &at(const std::string &key, Tensor &&default_tensor) {
-        QK_LOG_DEBUG("%s for key %s", __PRETTY_FUNCTION__, key.c_str());
         if (isExist(key)) {
             return tensor_map_.at(key);
         }

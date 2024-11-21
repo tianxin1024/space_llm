@@ -26,7 +26,6 @@ ffnLayer<T>::ffnLayer(size_t max_batch_size,
     inter_size_(inter_size),
     int8_mode_(int8_mode),
     use_gated_activation_(use_gated_activation) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (int8_mode_ == 0) {
     } else if (int8_mode_ == 1) {
         QK_CHECK_WITH_INFO(!(std::is_same<T, float>::value), "Weight only quant not supported for fp32.");
@@ -50,12 +49,10 @@ ffnLayer<T>::ffnLayer(ffnLayer<T> const &ffn_layer) :
     inter_size_(ffn_layer.inter_size_),
     int8_mode_(ffn_layer.int8_mode_),
     use_gated_activation_(ffn_layer.use_gated_activation_) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
 }
 
 template <typename T>
 ffnLayer<T>::~ffnLayer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     cublas_wrapper_ = nullptr;
     freeBuffer();
 }
@@ -69,7 +66,6 @@ void ffnLayer<T>::allocateBuffer() {
 template <typename T>
 void ffnLayer<T>::allocateBuffer(size_t token_num, int moe_k, bool use_moe) {
     // TODO tianxin ...
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (use_moe) {
         // moe_gates_buf_ =
         //     (T *)allocator_->reMalloc(moe_gates_buf_, sizeof(T) * pad_to_multiple_of_16(token_num * expert_num_), false);
@@ -111,7 +107,6 @@ void ffnLayer<T>::allocateBuffer(size_t token_num, int moe_k, bool use_moe) {
 
 template <typename T>
 void ffnLayer<T>::freeBuffer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (is_allocate_buffer_) {
         allocator_->free((void **)(&inter_buf_));
         if (use_gated_activation_) {
@@ -150,7 +145,6 @@ void ffnLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_tensors, c
     //      expanded_source_row_to_expanded_dest_row [token_num, moe_k] (optional)
     //      expert_for_source_row [token_num, moe_k] (optional)
 
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     QK_CHECK(input_tensors->size() >= 1 && input_tensors->size() <= 5);
     QK_CHECK(output_tensors->size() >= 1 || output_tensors->size() <= 4);
     bool use_moe = false;

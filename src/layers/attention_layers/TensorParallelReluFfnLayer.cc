@@ -16,7 +16,6 @@ template <typename T>
 void TensorParallelReluFfnLayer<T>::forward(TensorMap *output_tensors,
                                             TensorMap *input_tensors,
                                             const ffnWeight<T> *ffn_weights) {
-    QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
     Tensor out_tensor = output_tensors->at("ffn_output");
     const size_t token_num = out_tensor.shape[0];
     const size_t hidden_units = out_tensor.shape[1];

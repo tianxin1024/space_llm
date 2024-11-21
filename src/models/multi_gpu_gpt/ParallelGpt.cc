@@ -65,7 +65,6 @@ void ParallelGpt<T>::allocateBuffer(size_t batch_size,
                                     size_t memory_len,
                                     size_t max_input_len,
                                     bool is_return_context_cum_log_probs) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     const size_t batchxbeam = batch_size * beam_width;
     const size_t local_batch_size = batch_size;
     QK_CHECK(batch_size % local_batch_size == 0);
@@ -442,7 +441,6 @@ void ParallelGpt<T>::forward(std::unordered_map<std::string, Tensor> *output_ten
     // When there is no input_ids, put the start token at step 0 of output_ids_buf_. After forward, only copy
     // the step 1 ~ max_output_seq_len of output_ids_buf_ to output_tensors->at(0).data
 
-    QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
     QK_CHECK_WITH_INFO(input_tensors->size() >= 3, "input_tensors->size() >= 3");
     QK_CHECK_WITH_INFO(output_tensors->size() >= 2, "output_tensors->size() >= 2");
     QK_CHECK(input_tensors->at("input_ids").shape.size() == 2);

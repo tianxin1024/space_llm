@@ -4,8 +4,6 @@ namespace space_llm {
 
 template <typename T>
 void GptDecoder<T>::initialize() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
-
     self_attention_layer_ = new TensorParallelDecoderSelfAttentionLayer<T>(max_batch_size_,
                                                                            head_num_,
                                                                            size_per_head_,
@@ -130,7 +128,6 @@ void GptDecoder<T>::allocateBuffer() {
 
 template <typename T>
 void GptDecoder<T>::allocateBuffer(size_t batch_size) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     decoder_layer_output_ = reinterpret_cast<T *>(
         allocator_->reMalloc(decoder_layer_output_, sizeof(T) * batch_size * hidden_units_, false));
     decoder_normed_input_ = reinterpret_cast<T *>(
@@ -181,8 +178,6 @@ void GptDecoder<T>::forward(std::unordered_map<std::string, Tensor> *output_tens
     //      decoder_output [local_batch_size, hidden_dimension],
     //      key_cache [num_layer, batch_size, head_num, size_per_head // x, memory_len, x]
     //      value_cache [num_layer, batch_size, head_num, memory_len, size_per_head]
-
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
 
     QK_CHECK(input_tensors->count("decoder_input"));
     QK_CHECK(input_tensors->count("finished"));
@@ -467,7 +462,6 @@ void GptDecoder<T>::forward(std::unordered_map<std::string, Tensor> *output_tens
 template <typename T>
 void GptDecoder<T>::freeBuffer() {
     if (is_allocate_buffer_) {
-        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
         allocator_->free((void **)(&decoder_layer_output_));
         allocator_->free((void **)(&decoder_normed_input_));
         allocator_->free((void **)(&self_attn_output_));

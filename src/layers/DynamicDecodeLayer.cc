@@ -7,8 +7,6 @@ namespace space_llm {
 
 template <typename T>
 void DynamicDecodeLayer<T>::initialize() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
-
     topk_decode_ = new TopKSamplingLayer<T>(0, vocab_size_, vocab_size_padded_,
                                             0,    // end_id, deprecated
                                             0,    // top_k_, deprecated
@@ -46,27 +44,23 @@ DynamicDecodeLayer<T>::DynamicDecodeLayer(size_t vocab_size,
     vocab_size_(vocab_size),
     vocab_size_padded_(vocab_size_padded),
     cuda_device_prop_(cuda_device_prop) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     initialize();
 }
 
 template <typename T>
 void DynamicDecodeLayer<T>::allocateBuffer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     h_pinned_finished_sum_ = (int *)allocator_->reMalloc(h_pinned_finished_sum_, sizeof(int), true, true);
     return;
 }
 
 template <typename T>
 void DynamicDecodeLayer<T>::freeBuffer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     allocator_->free((void **)(&h_pinned_finished_sum_), true);
     return;
 }
 
 template <typename T>
 DynamicDecodeLayer<T>::~DynamicDecodeLayer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     delete online_beamsearch_decode_;
     delete beamsearch_decode_;
     delete topk_decode_;
@@ -96,7 +90,6 @@ void DynamicDecodeLayer<T>::setup(const size_t batch_size,
    *   \param  top_p_reset_ids [batch_size] on gpu, uint32, optional
    */
 
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     has_diff_runtime_args_ = hasDiffRuntimeArgs(runtime_args);
 
     if (beam_width == 1) { // sampling layers
@@ -138,7 +131,6 @@ template <typename T>
 void DynamicDecodeLayer<T>::forward(
     std::unordered_map<std::string, Tensor> *output_tensors,
     const std::unordered_map<std::string, Tensor> *input_tensors) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     TensorMap input_map(*input_tensors);
     TensorMap output_map(*output_tensors);
     forward(&output_map, &input_map);
@@ -193,7 +185,6 @@ void DynamicDecodeLayer<T>::forward(TensorMap *output_tensors,
    *
    */
 
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     const int ite = (int)input_tensors->at("ite").getVal<uint>();
     const int step = input_tensors->at("step").getVal<int>();
     QK_CHECK(input_tensors->at("logits").shape.size() == 3);

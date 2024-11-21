@@ -24,7 +24,6 @@ void GptContextAttentionLayer<T>::forward(TensorMap *output_tensors,
     //      hidden_features [token_num, hidden_dimension]
     //      key_cache [batch, local_head_num, size_per_head // x, max_seq_len, x]
     //      value_cache [batch, local_head_num, max_seq_len, size_per_head]
-    QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
     QK_CHECK(output_tensors->at("key_cache").shape.size() == 5);
     QK_CHECK(output_tensors->at("value_cache").shape.size() == 4
              || output_tensors->at("value_cache").shape.size() == 3);
@@ -291,7 +290,6 @@ void GptContextAttentionLayer<T>::forward(TensorMap *output_tensors,
         freeBuffer();
     }
     sync_check_cuda_error();
-    QK_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template <typename T>
@@ -345,7 +343,6 @@ GptContextAttentionLayer<T>::GptContextAttentionLayer(size_t max_batch_size,
     neox_rotary_style_(false),
     is_qk_buf_float_(is_qk_buf_float || int8_mode == 2),
     int8_mode_(int8_mode) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     // dispatcher_fp16.reset(new FusedMHARunnerFP16v2(local_head_num_, size_per_head_, sm_, 1.0f));
 }
 
@@ -376,7 +373,6 @@ GptContextAttentionLayer<T>::GptContextAttentionLayer(size_t max_batch_size,
     neox_rotary_style_(neox_rotary_style),
     is_qk_buf_float_(is_qk_buf_float),
     int8_mode_(int8_mode) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     // dispatcher_fp16.reset(new FusedMHARunnerFP16v2(local_head_num_, size_per_head_, sm_, 1.0f));
 }
 
@@ -413,7 +409,6 @@ void GptContextAttentionLayer<T>::allocateBuffer() {
 
 template <typename T>
 void GptContextAttentionLayer<T>::allocateBuffer(size_t batch_size, size_t seq_len, bool allocate_qk_buf) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     // const auto type_size = int8_mode_ == 2 ? sizeof(int8_t) : sizeof(T);
     // NOTE (perkzz): use sizeof(T) here for cutlass int8 kernels.
     const auto type_size = sizeof(T);
@@ -465,7 +460,6 @@ void GptContextAttentionLayer<T>::allocateBuffer(size_t batch_size, size_t seq_l
 template <typename T>
 void GptContextAttentionLayer<T>::freeBuffer() {
     if (is_allocate_buffer_) {
-        QK_LOG_DEBUG(__PRETTY_FUNCTION__);
         allocator_->free((void **)(&qkv_buf_));
         allocator_->free((void **)(&q_buf_2_));
         allocator_->free((void **)(&qk_buf_));

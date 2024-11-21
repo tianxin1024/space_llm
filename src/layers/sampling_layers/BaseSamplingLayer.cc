@@ -27,7 +27,6 @@ BaseSamplingLayer<T>::BaseSamplingLayer(size_t max_batch_size,
 
 template <typename T>
 void BaseSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tensor top_p) {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     curandstate_buf_ = reinterpret_cast<curandState_t *>(
         allocator_->reMalloc(curandstate_buf_, sizeof(curandState_t) * batch_size, false));
     random_seeds_buf_ = reinterpret_cast<unsigned long long *>(
@@ -53,7 +52,6 @@ void BaseSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tenso
 
 template <typename T>
 void BaseSamplingLayer<T>::freeBuffer() {
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (is_allocate_buffer_) {
         allocator_->free((void **)(&curandstate_buf_));
         allocator_->free((void **)(&random_seeds_buf_));
@@ -95,7 +93,6 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     //          repetition_penalty and presence_penalty are multually exclusive.
     //      min_length [1] or [batch_size] on cpu, optional.
 
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     Tensor runtime_top_k = runtime_args->isExist("runtime_top_k") ? runtime_args->at("runtime_top_k") : Tensor();
     Tensor runtime_top_p = runtime_args->isExist("runtime_top_p") ? runtime_args->at("runtime_top_p") : Tensor();
     allocateBuffer(batch_size, runtime_top_k, runtime_top_p);
