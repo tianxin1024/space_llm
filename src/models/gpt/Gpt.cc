@@ -456,6 +456,9 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
     const size_t batch_size = output_tensors->at("output_ids").shape[0];
     const size_t beam_width = output_tensors->at("output_ids").shape[1];
 
+    print_to_screen(input_tensors->at("input_ids").getPtr<int>(), 10);
+    exit(0);
+
     QK_CHECK_WITH_INFO(output_tensors->count("cum_log_probs") == 0
                            || output_tensors->at("cum_log_probs").size() == batch_size * beam_width,
                        "The shape of cum_log_probs should match with batch_size x beam_width if provided.");
