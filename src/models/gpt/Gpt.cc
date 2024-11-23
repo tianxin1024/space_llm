@@ -4,8 +4,6 @@
 
 namespace space_llm {
 
-#define printValue(val) print_to_screen((val), 10)
-
 template <typename T>
 void Gpt<T>::initialize() {
     gpt_context_decoder_ = new GptContextDecoder<T>(0,
@@ -458,8 +456,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
     const size_t batch_size = output_tensors->at("output_ids").shape[0];
     const size_t beam_width = output_tensors->at("output_ids").shape[1];
 
-    print_to_screen(input_tensors->at("input_ids").getPtr<int>(), 10);
-
     QK_CHECK_WITH_INFO(output_tensors->count("cum_log_probs") == 0
                            || output_tensors->at("cum_log_probs").size() == batch_size * beam_width,
                        "The shape of cum_log_probs should match with batch_size x beam_width if provided.");
@@ -651,8 +647,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
         }
         sync_check_cuda_error();
 
-        print_to_screen(gpt_weights->pre_decoder_embedding_table, 10);
-        exit(0);
         QK_LOG_INFO("padded embedding kernel init");
         if (vocab_size_ == vocab_size_padded_) {
             padded_embedding_kernel_ptr_ = gpt_weights->post_decoder_embedding.kernel;
@@ -668,9 +662,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
         bool use_shared_contexts = (shared_contexts_ratio_ > 0.0f) && (max_input_length >= 1) && (batch_size > 1);
         QK_LOG_INFO("find context dups");
         if (use_shared_contexts) {
-            printf("-----------------------------\n");
-            print_to_screen(input_tensors->at("input_ids").getPtr<int>(), 10);
-            print_to_screen(shared_contexts_idx_, 2);
             invokeFindContextDups(shared_contexts_idx_,
                                   batch_to_compact_idx_,
                                   compact_idx_,
@@ -680,7 +671,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                                   beam_width,
                                   max_input_length,
                                   stream_);
-            print_to_screen(shared_contexts_idx_, 2);
             cudaD2Hcpy(&compact_size, compact_size_, 1);
             use_shared_contexts = compact_size <= shared_contexts_ratio_ * batch_size;
             sync_check_cuda_error();
@@ -748,9 +738,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                     use_request_p_prompt_embedding ? input_tensors->at("request_prompt_embedding").getPtr<T>() :
                                                      nullptr};
 
-                // print_to_screen(gpt_weights->pre_decoder_embedding_table, 10);
-                print_to_screen(gpt_weights->position_encoding_table, 10);
-                printf("----------------- flag 2----------------------------\n");
                 invokeInputIdsEmbeddingLookupPosEncoding(context_decoder_input_buf_,
                                                          output_ids_buf_,
                                                          gpt_weights->pre_decoder_embedding_table,
@@ -764,16 +751,10 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                                                          hidden_units_,
                                                          stream_);
                 sync_check_cuda_error();
-                print_to_screen(gpt_weights->position_encoding_table, 10);
-                // print_to_screen(gpt_weights->pre_decoder_embedding_table, 10);
-                printf("----------------- flag 2----------------------------\n");
             }
 
-            exit(0);
             if (gpt_variant_params_.has_pre_decoder_layernorm) {
                 QK_LOG_INFO("pre-decoder layernorm");
-                print_to_screen(context_decoder_input_buf_, 20);
-                exit(0);
                 invokeGeneralLayerNorm(context_decoder_normed_input_buf_,
                                        context_decoder_input_buf_,
                                        gpt_weights->pre_decoder_layernorm.gamma,
@@ -795,8 +776,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                                             stream_);
             sync_check_cuda_error();
 
-            print_to_screen(context_decoder_input_buf_, 20);
-            exit(0);
             TensorMap decoder_input_tensors(
                 {{"decoder_input",
                   Tensor(MEMORY_GPU,
@@ -839,11 +818,13 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                   Tensor(MEMORY_GPU, data_type, {batch_size * beam_width, hidden_units_}, decoder_output_buf_)}});
 
             print_to_screen(decoder_input_tensors.at("decoder_input").getPtr<T>(), 10);
-            exit(0);
 
             // TODO tianxin debug
             gpt_context_decoder_->forward(
                 &decoder_output_tensors, &decoder_input_tensors, &gpt_weights->decoder_layer_weights);
+
+            print_to_screen(decoder_output_tensors.at("decoder_output").getPtr<T>(), 10);
+            exit(0);
 
             if (is_return_context_embeddings) {
                 QK_LOG_INFO("context embedding sum length dim");
