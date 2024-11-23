@@ -201,13 +201,56 @@ cudaAutoCpy(unsigned long long const **tgt, unsigned long long const *const *src
 
 // loads data from binary file. If it succeeds, returns a non-empty vector. If loading fails or
 // the product of the elements in shape is 0, this function will return an empty vector.
+// template <typename T>
+// std::vector<T> loadWeightFromBinHelper(std::vector<size_t> shape, std::string filename) {
+//     if (shape.size() > 2) {
+//         printf("[ERROR] shape should have less than two dims \n");
+//         return std::vector<T>();
+//     }
+
+//     size_t dim0 = shape[0], dim1 = 1;
+//     if (shape.size() == 2) {
+//         dim1 = shape[1];
+//     }
+//     size_t size = dim0 * dim1;
+//     if (size == 0) {
+//         QK_LOG_WARNING("shape is zero, skip loading weight from file %s \n", filename.c_str());
+//         return std::vector<T>();
+//     }
+
+//     std::vector<T> host_array(size);
+//     std::ifstream in(filename, std::ios::in | std::ios::binary);
+//     if (!in.is_open()) {
+//         QK_LOG_WARNING("file %s cannot be opened, loading model fails! \n", filename.c_str());
+//         return std::vector<T>();
+//     }
+
+//     size_t loaded_data_size = sizeof(T) * size;
+//     in.seekg(0, in.end);
+//     in.seekg(0, in.beg);
+
+//     QK_LOG_DEBUG("Read " + std::to_string(loaded_data_size) + " bytes from " + filename);
+//     in.read((char *)host_array.data(), loaded_data_size);
+
+//     size_t in_get_size = in.gcount();
+//     if (in_get_size != loaded_data_size) {
+//         QK_LOG_WARNING("file %s only has %ld, but request %ld, loading model fails! \n",
+//                        filename.c_str(),
+//                        in_get_size,
+//                        loaded_data_size);
+//         return std::vector<T>();
+//     }
+//     in.close();
+//     // If we succeed, return an array with values.
+//     return host_array;
+// }
+
 template <typename T>
 std::vector<T> loadWeightFromBinHelper(std::vector<size_t> shape, std::string filename) {
     if (shape.size() > 2) {
         printf("[ERROR] shape should have less than two dims \n");
         return std::vector<T>();
     }
-
     size_t dim0 = shape[0], dim1 = 1;
     if (shape.size() == 2) {
         dim1 = shape[1];

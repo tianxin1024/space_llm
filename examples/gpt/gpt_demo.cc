@@ -217,6 +217,8 @@ void gpt_example(const INIReader reader) {
     GptWeight<T> gpt_weights(hidden_units, inter_size, vocab_size, decoder_layers, max_seq_len, 1, 0, 1, 0, 0);
 
     gpt_weights.loadModel(model_dir);
+    print_to_screen(gpt_weights.pre_decoder_embedding_table, 10);
+    exit(0);
 
     AttentionType attention_type = AttentionType::UNFUSED_MHA;
 

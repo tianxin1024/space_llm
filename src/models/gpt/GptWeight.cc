@@ -280,6 +280,8 @@ void GptWeight<T>::loadModel(std::string dir_path) {
             weights_ptr[0], {max_seq_len_, hidden_units_}, dir_path + "/model.wpe.bin", model_file_type);
     }
     loadWeightFromBin<T>(weights_ptr[1], {vocab_size_ * hidden_units_}, dir_path + "/model.wte.bin", model_file_type);
+    print_to_screen(weights_ptr[1], 10);
+    exit(0);
     if (gpt_variant_params_.has_pre_decoder_layernorm) {
         loadWeightFromBin<T>(
             weights_ptr[2], {hidden_units_}, dir_path + "/model.pre_decoder_layernorm.weight.bin", model_file_type);
