@@ -253,6 +253,10 @@ void GptDecoder<T>::forward(std::unordered_map<std::string, Tensor> *output_tens
             self_attention_input_tensors.insert("linear_bias_slopes", input_tensors->at("linear_bias_slopes"));
         }
 
+        printf(">>>>>>>>>>>>>> GptDecoder.cc: 256\n");
+        print_to_screen(decoder_input, 10);
+        exit(0);
+
         // maybe have a bug
         size_t cache_offset = l;
         for (auto t = k_cache.shape.begin() + 1; t != k_cache.shape.end(); ++t) {

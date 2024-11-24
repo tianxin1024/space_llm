@@ -7,6 +7,7 @@
 #include "layers/BaseLayer.h"
 #include "layers/attention_layers/BaseAttentionLayer.h"
 #include "layers/attention_layers/TensorParallelReluFfnLayer.h"
+#include "layers/attention_layers/TensorParallelGeluFfnLayer.h"
 #include "utils/tensor.h"
 #include "utils/allocator.h"
 #include "utils/cublasMMWrapper.h"

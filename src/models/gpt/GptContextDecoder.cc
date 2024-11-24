@@ -24,23 +24,22 @@ void GptContextDecoder<T>::initialize() {
     bool use_gated_activation = activation_type_ == ActivationType::GeGLU || activation_type_ == ActivationType::ReGLU;
     size_t max_inter_size = has_adapters_ ? std::max(inter_size_, adapter_inter_size_) : inter_size_;
     if (activation_type_ == ActivationType::Gelu || activation_type_ == ActivationType::GeGLU) {
-        // ffn_layer_ = new TensorParallelGeluFfnLayer<T>(max_batch_size_,
-        //                                                max_seq_len_,
-        //                                                head_num_,
-        //                                                size_per_head_,
-        //                                                expert_num_, // expert_num
-        //                                                max_inter_size,
-        //                                                tensor_para_,
-        //                                                stream_,
-        //                                                cublas_wrapper_,
-        //                                                allocator_,
-        //                                                true,
-        //                                                is_free_buffer_after_forward_,
-        //                                                sparse_,
-        //                                                int8_mode_,
-        //                                                use_gated_activation,
-        //                                                custom_all_reduce_comm_,
-        //                                                enable_custom_all_reduce_);
+        ffn_layer_ = new TensorParallelGeluFfnLayer<T>(max_batch_size_,
+                                                       max_seq_len_,
+                                                       head_num_,
+                                                       size_per_head_,
+                                                       expert_num_, // expert_num
+                                                       max_inter_size,
+                                                       stream_,
+                                                       cublas_wrapper_,
+                                                       allocator_,
+                                                       true,
+                                                       is_free_buffer_after_forward_,
+                                                       sparse_,
+                                                       int8_mode_,
+                                                       use_gated_activation
+
+        );
     } else if (activation_type_ == ActivationType::Relu || activation_type_ == ActivationType::ReGLU) {
         ffn_layer_ = new TensorParallelReluFfnLayer<T>(max_batch_size_,
                                                        max_seq_len_,
@@ -319,6 +318,8 @@ void GptContextDecoder<T>::forward(
     AttentionType attention_type = attention_type_;
     const bool is_unpadded_mha = isUnPaddedMHA(attention_type);
 
+    // TODO have a bug
+
     for (uint ite = 0; ite < iteration_num; ite++) {
         size_t h_token_num = local_batch_size * seq_len;
         if (is_unpadded_mha) {
@@ -336,9 +337,10 @@ void GptContextDecoder<T>::forward(
 
         for (uint l = 0; l < num_layer_; l++) {
             bool use_moe = std::find(moe_layer_index_.begin(), moe_layer_index_.end(), l) != moe_layer_index_.end();
-            if (isValidLayerParallelId(l) == false) {
-                continue;
-            }
+            // tianxin TODO have a bug
+            // if (isValidLayerParallelId(l) == false) {
+            //     continue;
+            // }
 
             if (l == 0 && is_unpadded_mha) {
                 const T *base_input =
@@ -438,9 +440,16 @@ void GptContextDecoder<T>::forward(
                 {"key_cache", Tensor{MEMORY_GPU, data_type, self_k_cache_size, k_cache_ptr}},
                 {"value_cache", Tensor{MEMORY_GPU, data_type, self_v_cache_size, v_cache_ptr}}};
 
+            printf(">>>>>> GptContextDecoder.cc:442 self_attn_output_\n");
+            print_to_screen(self_attn_output_, 10);
             self_attention_layer_->forward(
                 &self_attention_output_tensors, &self_attention_input_tensors, &layer_weight->self_attention_weights);
+            print_to_screen(self_attn_output_, 10);
+            // exit(0);
 
+            // have a bug
+            print_to_screen(k_cache.getPtrWithOffset<T>(cache_layer_offset), 10);
+            exit(0);
             if (use_shared_contexts) {
                 // Even with local batches, we must process the whole K/V caches as any
                 // element in batch_idx_to_compact_idx may reference the local batch
@@ -511,6 +520,7 @@ void GptContextDecoder<T>::forward(
                     int8_mode_,
                     stream_);
             } else if (layernorm_type_ == LayerNormType::post_layernorm) {
+                printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> post_layernorm \n\n\n\n");
                 // TODO tianxin
                 // invokeAddBiasResidualLayerNorm(after_adapter_attn_output_,
                 //                                decoder_input,
