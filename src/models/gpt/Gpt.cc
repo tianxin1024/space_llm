@@ -817,9 +817,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                  {"last_token_hidden_units",
                   Tensor(MEMORY_GPU, data_type, {batch_size * beam_width, hidden_units_}, decoder_output_buf_)}});
 
-            print_to_screen(decoder_input_tensors.at("decoder_input").getPtr<T>(), 10);
-
-            // TODO tianxin debug
             gpt_context_decoder_->forward(
                 &decoder_output_tensors, &decoder_input_tensors, &gpt_weights->decoder_layer_weights);
 

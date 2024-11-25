@@ -338,9 +338,9 @@ void GptContextDecoder<T>::forward(
         for (uint l = 0; l < num_layer_; l++) {
             bool use_moe = std::find(moe_layer_index_.begin(), moe_layer_index_.end(), l) != moe_layer_index_.end();
             // tianxin TODO have a bug
-            // if (isValidLayerParallelId(l) == false) {
-            //     continue;
-            // }
+            if (isValidLayerParallelId(l) == false) {
+                continue;
+            }
 
             if (l == 0 && is_unpadded_mha) {
                 const T *base_input =
@@ -440,16 +440,9 @@ void GptContextDecoder<T>::forward(
                 {"key_cache", Tensor{MEMORY_GPU, data_type, self_k_cache_size, k_cache_ptr}},
                 {"value_cache", Tensor{MEMORY_GPU, data_type, self_v_cache_size, v_cache_ptr}}};
 
-            printf(">>>>>> GptContextDecoder.cc:442 self_attn_output_\n");
-            print_to_screen(self_attn_output_, 10);
             self_attention_layer_->forward(
                 &self_attention_output_tensors, &self_attention_input_tensors, &layer_weight->self_attention_weights);
-            print_to_screen(self_attn_output_, 10);
-            // exit(0);
 
-            // have a bug
-            print_to_screen(k_cache.getPtrWithOffset<T>(cache_layer_offset), 10);
-            exit(0);
             if (use_shared_contexts) {
                 // Even with local batches, we must process the whole K/V caches as any
                 // element in batch_idx_to_compact_idx may reference the local batch
@@ -686,17 +679,17 @@ void GptContextDecoder<T>::forward(
     }
 }
 
+// TODO remove Parallel
 template <typename T>
 bool GptContextDecoder<T>::isValidLayerParallelId(uint l) {
     int local_num_layer = (int)(ceil(num_layer_ * 1.0f));
-    return l < num_layer_ && (l >= local_num_layer)
-           && (l < local_num_layer * 1);
+    return l < num_layer_ && (l < local_num_layer * 1);
 }
 
 template <typename T>
 bool GptContextDecoder<T>::isFirstLayerParallelId(uint l) {
     int local_num_layer = (int)(ceil(num_layer_ * 1.0f));
-    return l < num_layer_ && (l == local_num_layer);
+    return l < num_layer_ && (l == local_num_layer * 0);
 }
 
 template <typename T>
@@ -708,7 +701,7 @@ bool GptContextDecoder<T>::isLastLayerParallelId(uint l) {
 template <typename T>
 int GptContextDecoder<T>::getFirstLayerParallelId() {
     int local_num_layer = (int)(ceil(num_layer_ * 1.0f));
-    return local_num_layer;
+    return local_num_layer * 0;
 }
 
 template class GptContextDecoder<float>;
