@@ -639,6 +639,9 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
         // initialize the output ids and parent ids
         QK_LOG_INFO("initialize output and parent ids");
         cudaMemsetAsync(output_ids_buf_, 0, sizeof(int) * batch_size * beam_width * session_len, stream_);
+        print_to_screen(output_ids_buf_, batch_size * beam_width * session_len);
+        printf(" >>>>>>>>>>>>>>>>>> output_ids_buf <<<<<<<<<<<<<<<<<<<<<<<<<<\n");
+
         cudaMemsetAsync(parent_ids_buf_, 0, sizeof(int) * batch_size * beam_width * session_len, stream_);
         cudaMemsetAsync(tiled_masked_tokens_, false, sizeof(bool) * batch_size * beam_width * memory_len, stream_);
         cudaMemsetAsync(tiled_total_padding_count_, 0, sizeof(int) * batch_size * beam_width, stream_);
@@ -751,6 +754,11 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                                                          hidden_units_,
                                                          stream_);
                 sync_check_cuda_error();
+
+                // TODO  这里的处理是正确的
+                // print_to_screen(output_ids_buf_, batch_size * beam_width * session_len);
+                // printf(" >>>>>>>>>>>>>>>>>> output_ids_buf <<<<<<<<<<<<<<<<<<<<<<<<<<\n");
+                // exit(0);
             }
 
             if (gpt_variant_params_.has_pre_decoder_layernorm) {
@@ -819,9 +827,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
 
             gpt_context_decoder_->forward(
                 &decoder_output_tensors, &decoder_input_tensors, &gpt_weights->decoder_layer_weights);
-
-            print_to_screen(decoder_output_tensors.at("decoder_output").getPtr<T>(), 10);
-            exit(0);
 
             if (is_return_context_embeddings) {
                 QK_LOG_INFO("context embedding sum length dim");
@@ -988,19 +993,47 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
 
             if ((max_input_length <= 1) || (step_ > step_start) || continue_gen) {
                 if (1) {
-                    invokeEmbeddingLookupPosEncodingPadCount(decoder_input_buf_ + hidden_units_offset,
-                                                             gpt_weights->pre_decoder_embedding_table,
-                                                             gpt_weights->position_encoding_table,
-                                                             output_ids_buf_ + id_offset,
-                                                             tiled_total_padding_count_ + id_offset,
-                                                             local_batch_size * beam_width,
-                                                             hidden_units_,
-                                                             (T)(1.0f),
-                                                             step_ - 1,
-                                                             batch_size * beam_width,
-                                                             0,
-                                                             stream_);
+                    printf(">>>>>>>>>> Embedding Lookup Pos Encoding\n");
+                    print_to_screen(decoder_input_buf_ + 1000, 10);
+                    printf("-----------------------------------------------\n");
+                    print_to_screen(gpt_weights->pre_decoder_embedding_table + 1000, 10);
+                    printf("-----------------------------------------------\n");
+                    print_to_screen(gpt_weights->position_encoding_table + 1000, 10);
+                    printf("-----------------------------------------------\n");
+                    print_to_screen(output_ids_buf_ + id_offset, 100);
+                    printf("------------12-----------------------------------\n");
+                    print_to_screen(tiled_total_padding_count_ + id_offset, 8);
+                    printf("------------end of print ---------------------------------\n");
+                    // invokeEmbeddingLookupPosEncodingPadCount(decoder_input_buf_ + hidden_units_offset,
+                    //                                          gpt_weights->pre_decoder_embedding_table,
+                    //                                          gpt_weights->position_encoding_table,
+                    //                                          output_ids_buf_ + id_offset,
+                    //                                          tiled_total_padding_count_ + id_offset,
+                    //                                          local_batch_size * beam_width,
+                    //                                          hidden_units_,
+                    //                                          (T)(1.0f),
+                    //                                          step_ - 1,
+                    //                                          batch_size * beam_width,
+                    //                                          0,
+                    //                                          stream_);
+
+                    std::cout << "local_batch_size: " << local_batch_size << std::endl;
+                    std::cout << "beam_width: " << beam_width << std::endl;
+                    std::cout << "hidden_units_: " << hidden_units_ << std::endl;
+                    std::cout << "step_: " << step_ << std::endl;
+                    std::cout << "batch_size: " << batch_size << std::endl;
+                    // TODO 发现bug output_ids_buf_, 存在bug， 维度长度不对
+                    invokeEmbeddingLookupPosEncodingPadCount(
+                        decoder_input_buf_ + hidden_units_offset,
+                        gpt_weights->pre_decoder_embedding_table,
+                        gpt_weights->position_encoding_table, output_ids_buf_ + id_offset,
+                        tiled_total_padding_count_ + id_offset,
+                        local_batch_size * beam_width, hidden_units_, (T)(1.0f),
+                        step_ - 1, batch_size * beam_width, 0, stream_);
+
                     sync_check_cuda_error();
+                    print_to_screen(decoder_input_buf_, 10);
+                    exit(0);
 
                     if (gpt_variant_params_.has_pre_decoder_layernorm) {
                         invokeGeneralLayerNorm(decoder_normed_input_buf_ + hidden_units_offset,
@@ -1017,6 +1050,8 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                     sync_check_cuda_error();
                 }
 
+                print_to_screen(decoder_input_buf_, 10);
+                exit(0);
                 std::unordered_map<std::string, Tensor> decoder_input_tensors(
                     {{"decoder_input",
                       Tensor(MEMORY_GPU,
@@ -1068,6 +1103,7 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                      {"value_cache", Tensor(MEMORY_GPU, data_type, self_v_cache_shape, value_cache_)}});
 
                 print_to_screen(decoder_output_tensors["decoder_output"].getPtr<T>(), 10);
+                printf("----------------- compute decoder input tensors----------------------------\n");
                 print_to_screen(decoder_input_tensors["decoder_input"].getPtr<T>(), 10);
                 gpt_decoder_->forward(
                     &decoder_output_tensors, &decoder_input_tensors, &gpt_weights->decoder_layer_weights);
@@ -1119,43 +1155,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                                           cublasGemmAlgo_t(-1));
                 } else {
                     // QK_CHECK(vocab_size_padded_ % tensor_para_.world_size_ == 0);
-                    // const int local_vocab_size = vocab_size_padded_;
-                    // float alpha = 1.0f;
-                    // float beta = 0.0f;
-                    // QK_LOG_INFO("logits gemm");
-                    // cublas_wrapper_->Gemm(CUBLAS_OP_T,
-                    //                       CUBLAS_OP_N,
-                    //                       local_vocab_size, // n
-                    //                       local_batch_size * beam_width,
-                    //                       hidden_units_, // k
-                    //                       &alpha,
-                    //                       padded_embedding_kernel_ptr_
-                    //                           + 0 * local_vocab_size * hidden_units_,
-                    //                       gemm_data_type,
-                    //                       hidden_units_,                                  // k
-                    //                       decoder_output_final_buf + hidden_units_offset, // OPT: no final layer norm
-                    //                       gemm_data_type,
-                    //                       hidden_units_, // k
-                    //                       &beta,
-                    //                       nccl_logits_buf_ + vocab_size_units_offset
-                    //                           + 0 * local_batch_size * beam_width * local_vocab_size,
-                    //                       CUDA_R_32F,
-                    //                       local_vocab_size, /* n */
-                    //                       CUDA_R_32F,
-                    //                       cublasGemmAlgo_t(-1));
-                    // QK_LOG_INFO("logits all gather");
-                    // ftNcclAllGather(nccl_logits_buf_ + vocab_size_units_offset,
-                    //                 nccl_logits_buf_ + vocab_size_units_offset,
-                    //                 local_batch_size * beam_width * local_vocab_size,
-                    //                 tensor_para_.rank_,
-                    //                 tensor_para_,
-                    //                 stream_);
-                    // invokeTransposeAxis01(logits_buf_ + vocab_size_units_offset,
-                    //                       nccl_logits_buf_ + vocab_size_units_offset,
-                    //                       tensor_para_.world_size_,
-                    //                       local_batch_size * beam_width,
-                    //                       local_vocab_size,
-                    //                       stream_);
                 }
 
                 int tmp_local_batch_size = local_batch_size;
@@ -1222,7 +1221,12 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                 }
 
                 QK_LOG_INFO("result sampling and stop check");
+                // TODO 这里存在bug
                 dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
+                printf(">>>>> Gpt.cc: dynamic_decode_output_tensors --------------\n");
+                print_to_screen(output_ids_buf_, 10);
+                print_to_screen(finished_buf_, 10);
+                // exit(0);
                 generation_should_stop &= subbatch_should_stop;
                 microbatch_should_stop_[ite] = subbatch_should_stop;
             } else {
