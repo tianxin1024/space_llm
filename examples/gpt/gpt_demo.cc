@@ -336,11 +336,11 @@ void gpt_example(const INIReader reader) {
     cudaDeviceSynchronize();
     gettimeofday(&start, NULL);
 
-    ite = 10;
-    QK_LOG_INFO("total time");
-    for (int i = 0; i < ite; ++i) {
-        gpt.forward(&output_tensors, &input_tensors, &gpt_weights);
-    }
+    // ite = 10;
+    // QK_LOG_INFO("total time");
+    // for (int i = 0; i < ite; ++i) {
+    //     gpt.forward(&output_tensors, &input_tensors, &gpt_weights);
+    // }
 
     cudaDeviceSynchronize();
     gettimeofday(&end, NULL);
@@ -361,8 +361,7 @@ void gpt_example(const INIReader reader) {
         } else {
             size_t outCount = total_output_len * request_batch_size * beam_width;
             int *hBuf = new int[outCount];
-            cudaD2Hcpy(hBuf,
-                       d_output_ids, outCount);
+            cudaD2Hcpy(hBuf, d_output_ids, outCount);
 
             {
                 std::cout << "Writing " << outCount << " elements\n";

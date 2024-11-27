@@ -141,6 +141,13 @@ protected:
     float *lp_nccl_logits_buf_ = nullptr;
     float *lp_logprob_buf_ = nullptr;
 
+    void setOutputTensors(std::unordered_map<std::string, Tensor> *output_tensors,
+                          const std::unordered_map<std::string, Tensor> *input_tensors,
+                          const size_t gen_len,
+                          const size_t session_len,
+                          const size_t max_context_len,
+                          const size_t max_input_without_prompt_length);
+
 public:
     Gpt(size_t max_batch_size,
         size_t max_seq_len,

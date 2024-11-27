@@ -639,8 +639,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
         // initialize the output ids and parent ids
         QK_LOG_INFO("initialize output and parent ids");
         cudaMemsetAsync(output_ids_buf_, 0, sizeof(int) * batch_size * beam_width * session_len, stream_);
-        print_to_screen(output_ids_buf_, batch_size * beam_width * session_len);
-        printf(" >>>>>>>>>>>>>>>>>> output_ids_buf <<<<<<<<<<<<<<<<<<<<<<<<<<\n");
 
         cudaMemsetAsync(parent_ids_buf_, 0, sizeof(int) * batch_size * beam_width * session_len, stream_);
         cudaMemsetAsync(tiled_masked_tokens_, false, sizeof(bool) * batch_size * beam_width * memory_len, stream_);
@@ -941,46 +939,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
             const int hidden_units_offset = id_offset * hidden_units_;
             const int vocab_size_units_offset = id_offset * vocab_size_padded_;
 
-            // Rank 0~N-1 needs to update the buffer by the results of last rank when the pipeline parallelism is
-            // enabled (pipeline_para_.world_size_ > 1). And if step_ == step_start, then this is the first step and
-            // these buffers are initialized by context directly.
-            // if (step_ != step_start && pipeline_para_.rank_ != pipeline_para_.world_size_ - 1
-            //     && pipeline_para_.world_size_ > 1) {
-            //     ftNcclGroupStart();
-            //     // receive updated sequence_length_ from last rank
-            //     ftNcclRecv(sequence_lengths_ + id_offset,
-            //                local_batch_size * beam_width,
-            //                pipeline_para_.world_size_ - 1,
-            //                pipeline_para_,
-            //                stream_);
-
-            //     // receive updated microbatch_should_stop_ from last rank
-            //     ftNcclRecv(microbatch_should_stop_ + ite, 1, pipeline_para_.world_size_ - 1, pipeline_para_, stream_);
-            //     generation_should_stop &= microbatch_should_stop_[ite];
-
-            //     // receive updated cache_indirections from last rank
-            //     if (beam_width > 1) {
-            //         ftNcclRecv(cache_indirections_[tgt_indir_idx] + id_offset * memory_len,
-            //                    local_batch_size * beam_width * memory_len,
-            //                    pipeline_para_.world_size_ - 1,
-            //                    pipeline_para_,
-            //                    stream_);
-            //     }
-
-            //     // for ids of next step, only first rank needs to receive updated ids
-            //     if (pipeline_para_.rank_ == 0) {
-            //         ftNcclRecv(output_ids_buf_ + (step_ - 1) * batch_size * beam_width + id_offset,
-            //                    local_batch_size * beam_width,
-            //                    pipeline_para_.world_size_ - 1,
-            //                    pipeline_para_,
-            //                    stream_);
-            //     }
-
-            //     ftNcclGroupEnd();
-            //     // throw errors when detected
-            //     ftNcclStreamSynchronize(tensor_para_, pipeline_para_, stream_);
-            //     sync_check_cuda_error();
-            // }
             // skip the microbatch for last step, which is updated by last rank
             if (microbatch_should_stop_[ite]) {
                 continue;
@@ -1001,8 +959,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                                                              0,
                                                              stream_);
                     sync_check_cuda_error();
-                    print_to_screen(decoder_input_buf_, 10);
-                    exit(0);
 
                     if (gpt_variant_params_.has_pre_decoder_layernorm) {
                         invokeGeneralLayerNorm(decoder_normed_input_buf_ + hidden_units_offset,
@@ -1182,11 +1138,7 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                 }
 
                 QK_LOG_INFO("result sampling and stop check");
-                // TODO 这里存在bug
                 dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
-                printf(">>>>> Gpt.cc: dynamic_decode_output_tensors --------------\n");
-                print_to_screen(output_ids_buf_, 10);
-                // exit(0);
                 generation_should_stop &= subbatch_should_stop;
                 microbatch_should_stop_[ite] = subbatch_should_stop;
             } else {
@@ -1214,6 +1166,109 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
         }
     }
     QK_LOG_INFO("communicate tensors");
+    setOutputTensors(output_tensors, input_tensors, gen_len, session_len,
+                     max_context_len, max_input_without_prompt_length);
+}
+
+template <typename T>
+void Gpt<T>::setOutputTensors(
+    std::unordered_map<std::string, Tensor> *output_tensors,
+    const std::unordered_map<std::string, Tensor> *input_tensors,
+    const size_t gen_len, const size_t session_len,
+    const size_t max_context_len,
+    const size_t max_input_without_prompt_length) {
+    QK_LOG_INFO("Resolve output tensors");
+
+    const size_t batch_size = output_tensors->at("output_ids").shape[0];
+    const size_t beam_width = output_tensors->at("output_ids").shape[1];
+    int *sequence_lengths = output_tensors->at("sequence_length").getPtr<int>();
+    const size_t max_prefix_soft_prompt_length =
+        has_prefix_soft_prompt_ ? input_tensors->at("request_prompt_embedding").shape[1] : 0;
+
+    cudaAutoCpy(sequence_lengths, sequence_lengths_,
+                output_tensors->at("sequence_length").size(), stream_);
+    if (input_tensors->at("input_ids").shape[1] == 0) {
+        // TODO: D2D sequence_lenghts
+        if (beam_width > 1) {
+            // For beam search, do gather_tree
+            // take output_parent_ids as inter buffer
+            // invokeGatherTree(
+            //     transposed_output_ids_buf_, sequence_lengths_, session_len,
+            //     batch_size, beam_width, output_ids_buf_ + batch_size * beam_width,
+            //     parent_ids_buf_ + batch_size * beam_width, end_ids_buf_, stream_);
+
+            // // transpose and take output_parent_ids as inter buffer
+            // invokeTransposeAxis01(output_tensors->at("output_ids").getPtr<int>(),
+            //                       transposed_output_ids_buf_, gen_len - 1,
+            //                       batch_size * beam_width, 1, stream_);
+        } else {
+            // For sampling, only copy the results to output_tensor
+            invokeTransposeAxis01(output_tensors->at("output_ids").getPtr<int>(),
+                                  output_ids_buf_ + batch_size * beam_width,
+                                  gen_len - 1, batch_size * beam_width, 1, stream_);
+        }
+    } else {
+        // For sampling, it is equivalent to all parent ids are 0.
+        gatherTreeParam param;
+        param.beams = transposed_output_ids_buf_;
+        // Remove prompt length if possible
+        param.max_sequence_lengths = sequence_lengths;
+        // add sequence_length 1 here because the sequence_length of time step t is
+        // t - 1
+        param.max_sequence_length_final_step = 1;
+        // response input lengths (used to slice the ids during postprocessing)
+        param.response_input_lengths =
+            output_tensors->count("response_input_lengths") ? output_tensors->at("response_input_lengths").getPtr<int>() : nullptr;
+        param.max_time = gen_len;
+        param.batch_size = batch_size;
+        param.beam_width = beam_width;
+        param.step_ids = output_ids_buf_;
+        param.parent_ids = beam_width == 1 ? nullptr : parent_ids_buf_;
+        param.end_tokens = end_ids_buf_;
+        param.max_input_length = max_context_len;
+        param.prefix_soft_prompt_lengths =
+            has_prefix_soft_prompt_ ? input_tensors->at("request_prompt_lengths").getPtr<int>() : nullptr;
+        param.input_lengths = tiled_input_lengths_buf_;
+        param.p_prompt_tuning_prompt_lengths =
+            has_p_prompt_tuning_ ? tiled_prompt_lengths_buf_ : nullptr;
+        param.max_input_without_prompt_length = max_input_without_prompt_length;
+        param.max_prefix_soft_prompt_length = max_prefix_soft_prompt_length;
+        param.stream = stream_;
+        param.output_ids = output_tensors->at("output_ids").getPtr<int>();
+        // NOTE: need to remove all prompt virtual tokens
+        invokeGatherTree(param);
+        sync_check_cuda_error();
+    }
+
+    // remove p_prompt virtual tokens and update output tensors shape
+    if (has_p_prompt_tuning_) { // remove p_prompt virtual tokens and update
+                                // output tensors shape
+        // output_tensors->at("output_ids")
+        //     .updateShape(
+        //         2, gen_len - (max_context_len - max_input_without_prompt_length));
+    }
+
+    if ((output_tensors->count("output_log_probs") > 0 && output_tensors->at("output_log_probs").data != nullptr)) {
+        invokeTransposeAxis01(
+            output_tensors->at("output_log_probs").getPtr<float>(),
+            output_log_probs_buf_,
+            input_tensors->at("output_seq_len").max<uint32_t>() - max_context_len,
+            batch_size * beam_width, 1, stream_);
+    }
+    // Return the cumulative log probability if requested.
+    if (output_tensors->count("cum_log_probs") > 0) {
+        Tensor cum_log_probs = output_tensors->at("cum_log_probs");
+        QK_CHECK_WITH_INFO(cum_log_probs.size() == batch_size * beam_width,
+                           "The shape of cum_log_probs does not match with "
+                           "batch_size x beam_width.");
+        cudaAutoCpy(cum_log_probs.getPtr<float>(), cum_log_probs_,
+                    cum_log_probs.size(), stream_);
+    }
+
+    if (output_tensors->count("is_finished")) {
+        cudaD2Dcpy(output_tensors->at("is_finished").getPtr<bool>(), finished_buf_,
+                   output_tensors->at("is_finished").size());
+    }
 }
 
 template class Gpt<float>;

@@ -626,6 +626,8 @@ void GptContextDecoder<T>::forward(
                                           hidden_units_,
                                           stream_);
                 } else if (layernorm_type_ == LayerNormType::post_layernorm) {
+                    printf(">>>>>>>>>>>>>>>> post_layernorm \n");
+                    exit(0);
                     // TODO tianxin
                     // invokeAddBiasResidualLayerNorm(decoder_output,
                     //                                after_adapter_attn_output_,
@@ -640,6 +642,8 @@ void GptContextDecoder<T>::forward(
                     //                                stream_);
                 }
             } else {
+                printf(">>>>>>>>>>>>>>>> moe GptContextDecoder.cc:645 \n");
+                exit(0);
                 // TODO ...
             }
             sync_check_cuda_error();
