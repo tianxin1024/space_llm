@@ -754,11 +754,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                                                          hidden_units_,
                                                          stream_);
                 sync_check_cuda_error();
-
-                // TODO  这里的处理是正确的
-                // print_to_screen(output_ids_buf_, batch_size * beam_width * session_len);
-                // printf(" >>>>>>>>>>>>>>>>>> output_ids_buf <<<<<<<<<<<<<<<<<<<<<<<<<<\n");
-                // exit(0);
             }
 
             if (gpt_variant_params_.has_pre_decoder_layernorm) {
@@ -993,44 +988,18 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
 
             if ((max_input_length <= 1) || (step_ > step_start) || continue_gen) {
                 if (1) {
-                    printf(">>>>>>>>>> Embedding Lookup Pos Encoding\n");
-                    print_to_screen(decoder_input_buf_ + 1000, 10);
-                    printf("-----------------------------------------------\n");
-                    print_to_screen(gpt_weights->pre_decoder_embedding_table + 1000, 10);
-                    printf("-----------------------------------------------\n");
-                    print_to_screen(gpt_weights->position_encoding_table + 1000, 10);
-                    printf("-----------------------------------------------\n");
-                    print_to_screen(output_ids_buf_ + id_offset, 100);
-                    printf("------------12-----------------------------------\n");
-                    print_to_screen(tiled_total_padding_count_ + id_offset, 8);
-                    printf("------------end of print ---------------------------------\n");
-                    // invokeEmbeddingLookupPosEncodingPadCount(decoder_input_buf_ + hidden_units_offset,
-                    //                                          gpt_weights->pre_decoder_embedding_table,
-                    //                                          gpt_weights->position_encoding_table,
-                    //                                          output_ids_buf_ + id_offset,
-                    //                                          tiled_total_padding_count_ + id_offset,
-                    //                                          local_batch_size * beam_width,
-                    //                                          hidden_units_,
-                    //                                          (T)(1.0f),
-                    //                                          step_ - 1,
-                    //                                          batch_size * beam_width,
-                    //                                          0,
-                    //                                          stream_);
-
-                    std::cout << "local_batch_size: " << local_batch_size << std::endl;
-                    std::cout << "beam_width: " << beam_width << std::endl;
-                    std::cout << "hidden_units_: " << hidden_units_ << std::endl;
-                    std::cout << "step_: " << step_ << std::endl;
-                    std::cout << "batch_size: " << batch_size << std::endl;
-                    // TODO 发现bug output_ids_buf_, 存在bug， 维度长度不对
-                    invokeEmbeddingLookupPosEncodingPadCount(
-                        decoder_input_buf_ + hidden_units_offset,
-                        gpt_weights->pre_decoder_embedding_table,
-                        gpt_weights->position_encoding_table, output_ids_buf_ + id_offset,
-                        tiled_total_padding_count_ + id_offset,
-                        local_batch_size * beam_width, hidden_units_, (T)(1.0f),
-                        step_ - 1, batch_size * beam_width, 0, stream_);
-
+                    invokeEmbeddingLookupPosEncodingPadCount(decoder_input_buf_ + hidden_units_offset,
+                                                             gpt_weights->pre_decoder_embedding_table,
+                                                             gpt_weights->position_encoding_table,
+                                                             output_ids_buf_ + id_offset,
+                                                             tiled_total_padding_count_ + id_offset,
+                                                             local_batch_size * beam_width,
+                                                             hidden_units_,
+                                                             (T)(1.0f),
+                                                             step_ - 1,
+                                                             batch_size * beam_width,
+                                                             0,
+                                                             stream_);
                     sync_check_cuda_error();
                     print_to_screen(decoder_input_buf_, 10);
                     exit(0);
@@ -1050,8 +1019,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                     sync_check_cuda_error();
                 }
 
-                print_to_screen(decoder_input_buf_, 10);
-                exit(0);
                 std::unordered_map<std::string, Tensor> decoder_input_tensors(
                     {{"decoder_input",
                       Tensor(MEMORY_GPU,
@@ -1102,14 +1069,8 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                      {"key_cache", Tensor(MEMORY_GPU, data_type, self_k_cache_shape, key_cache_)},
                      {"value_cache", Tensor(MEMORY_GPU, data_type, self_v_cache_shape, value_cache_)}});
 
-                print_to_screen(decoder_output_tensors["decoder_output"].getPtr<T>(), 10);
-                printf("----------------- compute decoder input tensors----------------------------\n");
-                print_to_screen(decoder_input_tensors["decoder_input"].getPtr<T>(), 10);
                 gpt_decoder_->forward(
                     &decoder_output_tensors, &decoder_input_tensors, &gpt_weights->decoder_layer_weights);
-                printf("----------------- compute decoder output ----------------------------\n");
-                print_to_screen(decoder_output_tensors["decoder_output"].getPtr<T>(), 10);
-                exit(0);
             }
 
             if (!fill_caches_only) {

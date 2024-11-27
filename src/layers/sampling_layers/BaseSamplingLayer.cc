@@ -34,18 +34,18 @@ void BaseSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tenso
         allocator_->reMalloc(random_seeds_buf_, sizeof(unsigned long long) * batch_size, false));
     temperature_buf_ =
         reinterpret_cast<float *>(allocator_->reMalloc(temperature_buf_, sizeof(float) * batch_size, false));
-    // repetition_penalty_buf_ =
-    //     reinterpret_cast<float *>(allocator_->reMalloc(repetition_penalty_buf_, sizeof(float) * batch_size, false));
-    // min_lengths_buf_ = reinterpret_cast<int *>(allocator_->reMalloc(min_lengths_buf_, sizeof(int) * batch_size, false));
-    // runtime_logits_buf_ = reinterpret_cast<T *>(
-    //     allocator_->reMalloc(runtime_logits_buf_, sizeof(T) * batch_size * vocab_size_padded_, false));
+    repetition_penalty_buf_ =
+        reinterpret_cast<float *>(allocator_->reMalloc(repetition_penalty_buf_, sizeof(float) * batch_size, false));
+    min_lengths_buf_ = reinterpret_cast<int *>(allocator_->reMalloc(min_lengths_buf_, sizeof(int) * batch_size, false));
+    runtime_logits_buf_ = reinterpret_cast<T *>(
+        allocator_->reMalloc(runtime_logits_buf_, sizeof(T) * batch_size * vocab_size_padded_, false));
     skip_decode_buf_ =
         reinterpret_cast<bool *>(allocator_->reMalloc(skip_decode_buf_, sizeof(bool) * batch_size, false));
 
     // host buffers.
     temperature_ = (float *)std::realloc((void *)temperature_, batch_size * sizeof(float));
-    // repetition_penalty_ = (float *)std::realloc((void *)repetition_penalty_, batch_size * sizeof(float));
-    // min_lengths_ = (int *)std::realloc((void *)min_lengths_, batch_size * sizeof(int));
+    repetition_penalty_ = (float *)std::realloc((void *)repetition_penalty_, batch_size * sizeof(float));
+    min_lengths_ = (int *)std::realloc((void *)min_lengths_, batch_size * sizeof(int));
     skip_decode_ = (bool *)std::realloc((void *)skip_decode_, batch_size * sizeof(bool));
 
     is_allocate_buffer_ = true;
@@ -57,13 +57,13 @@ void BaseSamplingLayer<T>::freeBuffer() {
         allocator_->free((void **)(&curandstate_buf_));
         allocator_->free((void **)(&random_seeds_buf_));
         allocator_->free((void **)(&temperature_buf_));
-        // allocator_->free((void **)(&repetition_penalty_buf_));
-        // allocator_->free((void **)(&min_lengths_buf_));
-        // allocator_->free((void **)(&runtime_logits_buf_));
+        allocator_->free((void **)(&repetition_penalty_buf_));
+        allocator_->free((void **)(&min_lengths_buf_));
+        allocator_->free((void **)(&runtime_logits_buf_));
         allocator_->free((void **)(&skip_decode_buf_));
         std::free(temperature_);
-        // std::free(repetition_penalty_);
-        // std::free(min_lengths_);
+        std::free(repetition_penalty_);
+        std::free(min_lengths_);
         std::free(skip_decode_);
         is_allocate_buffer_ = false;
     }
@@ -86,19 +86,19 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     // Set up the sampling layer for given runtime arguments.
     //
     // runtime_args:
-    //      runtime_top_k [1] or [batch_size] on cpu, optional.
-    //      runtime_top_p [1] or [batch_size] on cpu, optional.
-    //      temperature [1] or [batch_size] on cpu, optional.
-    //      repetition_penalty [1] or [batch_size] on cpu, optional.
-    //      presence_penalty [1] or [batch_size] on cpu, optional.
-    //          repetition_penalty and presence_penalty are multually exclusive.
-    //      min_length [1] or [batch_size] on cpu, optional.
+    //     runtime_top_k [1] or [batch_size] on cpu, optional.
+    //     runtime_top_p [1] or [batch_size] on cpu, optional
+    //     temperature [1] or [batch_size] on cpu, optional
+    //     repetition_penalty [1] or [batch_size] on cpu, optional
+    //     presence_penalty [1] or [batch_size] on cpu, optional,
+    //         repetition_penalty and presence_penalty are mutually exclusive.
+    //     min_length [1] or [batch_size] on cpu, optional
 
     Tensor runtime_top_k = runtime_args->isExist("runtime_top_k") ? runtime_args->at("runtime_top_k") : Tensor();
     Tensor runtime_top_p = runtime_args->isExist("runtime_top_p") ? runtime_args->at("runtime_top_p") : Tensor();
     allocateBuffer(batch_size, runtime_top_k, runtime_top_p);
 
-    // If runtime argument has single random seed, using this random seed to initialize the random table of all
+    // If guntime argument has single random seed, using this random seed to initialize the random table of all
     // sentences. If the argument has [batch_size] random seeds, initializing the random table by different random seeds
     // respectively. If no random seed, initialize the random table of all sentences by 0 directly.
     if (runtime_args->isExist("random_seed")) {
@@ -106,15 +106,15 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
         QK_CHECK_WITH_INFO(random_seeds.shape.size() == 1
                                && (random_seeds.size() == 1 || random_seeds.size() == batch_size),
                            fmtstr("random_seeds must be of shape [1] or [batch_size(%ld)], got random_seeds.shape=%s",
-                                  batch_size, vec2str(random_seeds.shape).c_str()));
+                                  batch_size,
+                                  vec2str(random_seeds.shape).c_str()));
         if (random_seeds.size() == 1) {
             invokeCurandInitialize(curandstate_buf_, batch_size, random_seeds.getVal<unsigned long long>(), stream_);
             sync_check_cuda_error();
         } else {
-            // TODO ...
             // unsigned long long *random_seed_ptr = random_seeds.getPtr<unsigned long long>();
             // cudaAutoCpy(random_seeds_buf_, random_seed_ptr, batch_size, stream_);
-            // invoke_CurandBatchInitialize(curandstate_buf_, batch_size, random_seeds_buf_, stream_);
+            // invokeCurandBatchInitialize(curandstate_buf_, batch_size, random_seeds_buf_, stream_);
             // sync_check_cuda_error();
         }
     } else {
@@ -136,15 +136,40 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
         std::copy_n(temperature.getPtr<float>(), batch_size, temperature_);
     }
 
-    if (runtime_args->isExist("presence_penalty") && runtime_args->isExist("repetition_penalty")) {
+    if (runtime_args->isExist("repetition_penalty") || runtime_args->isExist("presence_penalty")) {
         QK_CHECK_WITH_INFO(
             !(runtime_args->isExist("repetition_penalty") && runtime_args->isExist("presence_penalty")),
             "Found ambiguous parameters repetition_penalty and presence_penalty which are mutually exclusive. "
             "Please provide one of repetition_penalty or presence_penalty.");
-        // TODO ...
+        repetition_penalty_type_ = runtime_args->isExist("repetition_penalty") ? RepetitionPenaltyType::Multiplicative :
+                                                                                 RepetitionPenaltyType::Additive;
+        Tensor repetition_penalty = repetition_penalty_type_ == RepetitionPenaltyType::Multiplicative ?
+                                        runtime_args->at("repetition_penalty") :
+                                        runtime_args->at("presence_penalty");
+        if (repetition_penalty.size() == 1) {
+            float rp = repetition_penalty.getVal<float>();
+            deviceFill(repetition_penalty_buf_, batch_size, rp, stream_);
+            std::fill_n(repetition_penalty_, batch_size, rp);
+        } else {
+            cudaAutoCpy(repetition_penalty_buf_, repetition_penalty.getPtr<float>(), batch_size, stream_);
+            std::copy_n(repetition_penalty.getPtr<float>(), batch_size, repetition_penalty_);
+        }
+    } else {
+        repetition_penalty_type_ = RepetitionPenaltyType::None;
     }
-    // TOTO ...
+
+    const int default_min_length = 0;
+    Tensor min_lengths = runtime_args->at("min_length", Tensor(MEMORY_CPU, TYPE_INT32, {1}, &default_min_length));
+    if (min_lengths.size() == 1) {
+        int minlen = min_lengths.getVal<int>();
+        deviceFill(min_lengths_buf_, batch_size, minlen, stream_);
+        std::fill_n(min_lengths_, batch_size, minlen);
+    } else {
+        cudaAutoCpy(min_lengths_buf_, min_lengths.getPtr<int>(), batch_size, stream_);
+        std::copy_n(min_lengths.getPtr<int>(), batch_size, min_lengths_);
+    }
 }
+
 template <typename T>
 void BaseSamplingLayer<T>::forward(std::vector<Tensor> *output_tensors, const std::vector<Tensor> *input_tensors) {
     // input_tensors:
@@ -210,7 +235,7 @@ void BaseSamplingLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_t
     QK_CHECK(input_tensors->size() >= 4);
     QK_CHECK(output_tensors->size() >= 1);
     const int batch_size = output_tensors->at("output_ids").shape[1];
-    const int local_batch_size = input_tensors->at("logits").shape[2];
+    const int local_batch_size = input_tensors->at("logits").shape[0];
     const int step = input_tensors->at("step").getVal<int>();
     const int ite = input_tensors->at("ite").getVal<int>();
     const int max_input_length = input_tensors->at("max_input_length").getVal<int>();
