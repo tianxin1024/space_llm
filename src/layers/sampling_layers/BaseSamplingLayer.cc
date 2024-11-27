@@ -1,6 +1,7 @@
 #include "layers/sampling_layers/BaseSamplingLayer.h"
 #include "utils/memory_utils.h"
 #include "kernels/sampling_topk_kernels.h"
+#include "kernels/sampling_penalty_kernels.h"
 
 namespace space_llm {
 
@@ -146,13 +147,149 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
 }
 template <typename T>
 void BaseSamplingLayer<T>::forward(std::vector<Tensor> *output_tensors, const std::vector<Tensor> *input_tensors) {
+    // input_tensors:
+    //      logits [local_batch_size, vocab_size_padded]
+    //      embedding_bias [vocab_size_padded]
+    //      step [1] on cpu
+    //      max_input_length [1] on cpu
+    //      input_lengths [local_batch_size]
+    //      ite [1] on cpu
+    //      random_seed [1] on cpu, optional
+
+    // output_tensors:
+    //      output_ids [max_seq_len, batch_size]
+    //      finished [local_batch_size]
+    //      sequence_length [local_batch_size]
+    //      cum_log_probs [local_batch_size], must be float*
+    QK_CHECK(false);
+    std::unordered_map<std::string, Tensor> input_tensors_map{{"logits", input_tensors->at(0)},
+                                                              {"embedding_bias", input_tensors->at(1)},
+                                                              {"step", input_tensors->at(2)},
+                                                              {"max_input_lenght", input_tensors->at(3)},
+                                                              {"input_lengths", input_tensors->at(4)},
+                                                              {"ite", input_tensors->at(5)}};
+    if (input_tensors->size() == 7) {
+        input_tensors_map.insert({"random_seed", input_tensors->at(6)});
+    }
+
+    std::unordered_map<std::string, Tensor> output_tensors_map{{"output_ids", output_tensors->at(0)},
+                                                               {"finished", output_tensors->at(1)},
+                                                               {"sequence_length", output_tensors->at(2)},
+                                                               {"cum_log_probs", output_tensors->at(3)}};
+    forward(&output_tensors_map, &input_tensors_map);
 }
+
 template <typename T>
 void BaseSamplingLayer<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                                    const std::unordered_map<std::string, Tensor> *input_tensors) {
+    TensorMap input_map(*input_tensors);
+    TensorMap output_map(*output_tensors);
+    forward(&output_map, &input_map);
 }
+
 template <typename T>
 void BaseSamplingLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_tensors) {
+    // input_tensors:
+    //      logits [local_batch_size, vocab_size_padded]
+    //      embedding_bias [vocab_size_padded], optional
+    //      step [1] on cpu
+    //      max_input_length [1] on cpu
+    //      input_lengths [local_batch_size], optional
+    //      ite [1] on cpu
+    //      end_id [local_batch_size], optional
+
+    // output_tensors:
+    //      output_ids [max_seq_len, batch_size]
+    //      finished [local_batch_size], optional
+    //      sequence_length [local_batch_size], optional
+    //      cum_log_probs [batch_size], must be float*, optional
+    //          The cumultative log probability of generated tokens.
+    //      output_log_probs [local_batch_size], must be float*, optional
+    //          The log probs at the current step.
+
+    QK_CHECK(input_tensors->size() >= 4);
+    QK_CHECK(output_tensors->size() >= 1);
+    const int batch_size = output_tensors->at("output_ids").shape[1];
+    const int local_batch_size = input_tensors->at("logits").shape[2];
+    const int step = input_tensors->at("step").getVal<int>();
+    const int ite = input_tensors->at("ite").getVal<int>();
+    const int max_input_length = input_tensors->at("max_input_length").getVal<int>();
+    T *logits = input_tensors->at("logits").getPtr<T>();
+
+#define ALL_OF(p_, sz_, dt_, v_) (std::all_of(p_, p_ + sz_, [&](dt_ b) { return b == v_; }))
+
+    bool *skip_decode = skip_decode_ + ite * local_batch_size;
+    if (ALL_OF(skip_decode, local_batch_size, bool, true)) {
+        // No sample in the current batch to do TopX sampling.
+        return;
+    }
+    skip_any_ = std::any_of(skip_decode, skip_decode + local_batch_size, [](bool b) { return b; });
+    if (skip_any_) {
+        // A TopX Sampling layer directly changes the logit values. In case of skip_any==true,
+        // meaning topk and topp layers will run simultaneously for a batch in the same step.
+        // We copy the logits to an internal buffer, not affecting the other sampling layers.
+        QK_CHECK(input_tensors->at("logits").size() == local_batch_size * vocab_size_padded_);
+        cudaD2Dcpy(runtime_logits_buf_, logits, input_tensors->at("logits").size());
+        logits = runtime_logits_buf_;
+    }
+
+    const T *embedding_bias =
+        input_tensors->isExist("embedding_bias") ? input_tensors->at("embedding_bias").getPtr<T>() : nullptr;
+    if (embedding_bias != nullptr || !ALL_OF(temperature_ + ite * local_batch_size, local_batch_size, float, 1.0f)) {
+        invokeBatchApplyTemperaturePenalty(logits,
+                                           embedding_bias,
+                                           temperature_buf_ + ite * local_batch_size,
+                                           local_batch_size,
+                                           vocab_size_,
+                                           vocab_size_padded_,
+                                           stream_);
+    }
+    sync_check_cuda_error();
+
+    if (step > 1 && repetition_penalty_type_ != RepetitionPenaltyType::None) {
+        float default_value = getDefaultPenaltyValue(repetition_penalty_type_);
+        if (!ALL_OF(repetition_penalty_ + ite * local_batch_size, local_batch_size, float, default_value)) {
+            invokeBatchApplyRepetitionPenalty(
+                logits,
+                repetition_penalty_buf_ + ite * local_batch_size,
+                output_tensors->at("output_ids").getPtrWithOffset<int>(ite * local_batch_size),
+                batch_size,
+                local_batch_size,
+                vocab_size_padded_,
+                input_tensors->at("input_lengths", Tensor{MEMORY_GPU, TYPE_INT32, {}, nullptr}).getPtr<int>(),
+                max_input_length,
+                step,
+                repetition_penalty_type_,
+                stream_);
+            sync_check_cuda_error();
+        }
+    }
+
+    const int num_generated_tokens = step - max_input_length;
+    const int *min_lengths = min_lengths_ + ite * local_batch_size;
+    const bool invoke_min_length_penalty = std::any_of(
+        min_lengths, min_lengths + local_batch_size, [&](int min_length) { return min_length > num_generated_tokens; });
+    if (invoke_min_length_penalty) {
+        QK_CHECK_WITH_INFO(input_tensors->isExist("end_id"), "Need end_id to apply min length penlaty");
+        invokeMinLengthPenalty(logits,
+                               min_lengths_buf_ + ite * local_batch_size,
+                               input_tensors->getPtr<const int>("end_id"),
+                               output_tensors->getPtr<const int>("sequence_length"),
+                               max_input_length,
+                               local_batch_size,
+                               vocab_size_padded_,
+                               stream_);
+        sync_check_cuda_error();
+    }
+#undef ALL_OF
+
+    runSampling(output_tensors, input_tensors);
+
+    if (is_free_buffer_after_forward_) {
+        freeBuffer();
+    }
+    sync_check_cuda_error();
+    QK_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template class BaseSamplingLayer<float>;

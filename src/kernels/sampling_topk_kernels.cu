@@ -391,4 +391,63 @@ template void invokeTopKSampling(void *workspace,
                                  const int batch_size,
                                  const bool *skip_decode);
 
+template <typename T>
+__global__ void addBiasEndMask(T *logits,
+                               const T *bias,
+                               const int *end_ids,
+                               const bool *finished,
+                               const int vocab_size,
+                               const int vocab_size_padded) {
+    int bid = blockIdx.x;
+    bool finish = finished != nullptr ? finished[bid] : false;
+    int offset = bid * vocab_size_padded;
+
+    const bool IS_FP16 = std::is_same<T, half>::value;
+    const T MAX_T_VAL = (IS_FP16) ? HALF_FLT_MAX : FLT_MAX;
+    for (int tid = threadIdx.x; tid < vocab_size_padded; tid += blockDim.x) {
+        if (tid >= vocab_size) {
+            logits[offset + tid] = -MAX_T_VAL;
+        } else if (finish) {
+            logits[offset + tid] = (tid == end_ids[bid]) ? MAX_T_VAL : -MAX_T_VAL;
+        } else {
+            if (bias != nullptr) {
+                logits[offset + tid] += bias[tid];
+            }
+        }
+    }
+}
+
+template <typename T>
+void invokeAddBiasEndMask(T *logits,
+                          const T *bias,
+                          const int *end_ids,
+                          const bool *finished,
+                          const int batch_size,
+                          const int vocab_size,
+                          const int vocab_size_padded,
+                          cudaStream_t stream) {
+    dim3 grid(batch_size);
+    dim3 block(std::min(vocab_size_padded, 1024));
+    /*n is the vocab_size, e.g., 30000, 7000.... vocab_size is usually very big. */
+    addBiasEndMask<<<grid, block, 0, stream>>>(logits, bias, end_ids, finished, vocab_size, vocab_size_padded);
+}
+
+template void invokeAddBiasEndMask(float *logits,
+                                   const float *bias,
+                                   const int *end_ids,
+                                   const bool *finished,
+                                   const int batch_size,
+                                   const int vocab_size,
+                                   const int vocab_size_padded,
+                                   cudaStream_t stream);
+
+template void invokeAddBiasEndMask(half *logits,
+                                   const half *bias,
+                                   const int *end_ids,
+                                   const bool *finished,
+                                   const int batch_size,
+                                   const int vocab_size,
+                                   const int vocab_size_padded,
+                                   cudaStream_t stream);
+
 } // namespace space_llm

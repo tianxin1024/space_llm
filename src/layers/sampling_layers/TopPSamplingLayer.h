@@ -7,7 +7,7 @@ namespace space_llm {
 template <typename T>
 class TopPSamplingLayer : public BaseSamplingLayer<T> {
 private:
-    // void runSampling(TensorMap *output_tensors, TensorMap *input_tensors) override;
+    void runSampling(TensorMap *output_tensors, TensorMap *input_tensors) override;
     void allocateBuffer() override;
     void allocateBuffer(size_t batch_size, Tensor top_k, Tensor top_p) override;
     void freeBuffer() override;
@@ -34,6 +34,8 @@ private:
     using BaseSamplingLayer<T>::random_seeds_buf_;
     using BaseSamplingLayer<T>::skip_decode_buf_;
     using BaseSamplingLayer<T>::skip_decode_;
+    using BaseSamplingLayer<T>::skip_any_;
+    using BaseSamplingLayer<T>::runtime_logits_buf_;
 
     using BaseSamplingLayer<T>::stream_;
     using BaseSamplingLayer<T>::allocator_;

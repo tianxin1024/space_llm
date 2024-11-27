@@ -413,6 +413,8 @@ void DynamicDecodeLayer<T>::forward(TensorMap *output_tensors,
         // where "x" are skipped.
         topk_decode_->forward(&decode_output_tensors, &decode_input_tensors);
         topp_decode_->forward(&decode_output_tensors, &decode_input_tensors);
+        print_to_screen(decode_output_tensors.at("output_ids").getPtr<int>(), 100);
+        exit(0);
     }
 
     if (input_tensors->isExist("stop_words_list")) {

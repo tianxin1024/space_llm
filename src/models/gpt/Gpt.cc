@@ -1225,7 +1225,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                 dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
                 printf(">>>>> Gpt.cc: dynamic_decode_output_tensors --------------\n");
                 print_to_screen(output_ids_buf_, 10);
-                print_to_screen(finished_buf_, 10);
                 // exit(0);
                 generation_should_stop &= subbatch_should_stop;
                 microbatch_should_stop_[ite] = subbatch_should_stop;
@@ -1235,57 +1234,7 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
             }
 
             QK_LOG_INFO("result communication");
-            // send results to other rank
-            // if (fill_caches_only) {
-            //     invokePlusScalar(sequence_lengths_, 1, batch_size * beam_width, stream_);
-            // }
-
-            // When pipeline parallelism is enabled (pipeline_para_.world_size_ > 1), last rank needs to send updates
-            // to other ranks.
-            // if (step_ < gen_len - 1 && pipeline_para_.world_size_ > 1
-            //     && pipeline_para_.rank_ == pipeline_para_.world_size_ - 1) {
-            //     ftNcclGroupStart();
-            //     for (int i = 0; i < pipeline_para_.world_size_ - 1; i++) {
-            //         // send updated sequence_length_ to other rank
-            //         ftNcclSend(
-            //             sequence_lengths_ + id_offset, local_batch_size * beam_width, i, pipeline_para_, stream_);
-
-            //         // send updated microbatch_should_stop_
-            //         ftNcclSend(microbatch_should_stop_ + ite, 1, i, pipeline_para_, stream_);
-
-            //         // send updated cache_indirections
-            //         if (beam_width > 1) {
-            //             ftNcclSend(cache_indirections_[tgt_indir_idx] + id_offset * memory_len,
-            //                        local_batch_size * beam_width * memory_len,
-            //                        i,
-            //                        pipeline_para_,
-            //                        stream_);
-            //         }
-            //     }
-
-            //     // for ids of next step, only need to send updated ids to first rank
-            //     ftNcclSend(output_ids_buf_ + step_ * batch_size * beam_width + id_offset,
-            //                local_batch_size * beam_width,
-            //                0,
-            //                pipeline_para_,
-            //                stream_);
-
-            //     ftNcclGroupEnd();
-            //     // throw errors when detected
-            //     ftNcclStreamSynchronize(tensor_para_, pipeline_para_, stream_);
-            //     sync_check_cuda_error();
-            // }
         }
-
-        // if (token_generated_cb_ && step_ + 1 < (int)gen_len) {
-        //     setOutputTensors(
-        //         output_tensors, input_tensors, gen_len, session_len, max_context_len, max_input_without_prompt_length);
-        //     sendTensorsToFirstPipelineNode(output_tensors, input_tensors);
-
-        //     if (pipeline_para_.rank_ == 0 && tensor_para_.rank_ == 0) {
-        //         token_generated_cb_(output_tensors, token_generated_ctx_);
-        //     }
-        // }
 
         if (step_ == initial_step + max_input_length) {
             /* We have just finished processing input: update the padding count:
@@ -1304,9 +1253,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
         }
     }
     QK_LOG_INFO("communicate tensors");
-    // setOutputTensors(
-    //     output_tensors, input_tensors, gen_len, session_len, max_context_len, max_input_without_prompt_length);
-    // sendTensorsToFirstPipelineNode(output_tensors, input_tensors);
 }
 
 template class Gpt<float>;

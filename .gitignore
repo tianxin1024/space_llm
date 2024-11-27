@@ -6,3 +6,4 @@ debug
 /models
 gpt_example.log
 .vscode
+log

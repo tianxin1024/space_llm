@@ -1,4 +1,4 @@
-NUM_JOBS = $(shell nproc)
+NUM_JOBS = 8
 CXX      = g++
 PRO      = gpt_demo
 

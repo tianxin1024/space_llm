@@ -48,4 +48,14 @@ void invokeCurandInitialize(curandState_t *state,
                             unsigned long long random_seed,
                             cudaStream_t stream);
 
+template <typename T>
+void invokeAddBiasEndMask(T *logits,
+                          const T *bias,
+                          const int *end_ids,
+                          const bool *finished,
+                          const int batch_size,
+                          const int vocab_size,
+                          const int vocab_size_padded,
+                          cudaStream_t stream);
+
 } // namespace space_llm
