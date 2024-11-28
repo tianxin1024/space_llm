@@ -54,3 +54,7 @@ set_property(TARGET ban_bad_words PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 add_library(sampling_penalty_kernels STATIC sampling_penalty_kernels.cu)
 set_property(TARGET sampling_penalty_kernels PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET sampling_penalty_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+
+add_library(stop_criteria_kernels STATIC stop_criteria_kernels.cu)
+set_property(TARGET stop_criteria_kernels PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET stop_criteria_kernels PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)

@@ -336,11 +336,11 @@ void gpt_example(const INIReader reader) {
     cudaDeviceSynchronize();
     gettimeofday(&start, NULL);
 
-    // ite = 10;
-    // QK_LOG_INFO("total time");
-    // for (int i = 0; i < ite; ++i) {
-    //     gpt.forward(&output_tensors, &input_tensors, &gpt_weights);
-    // }
+    ite = 10;
+    QK_LOG_INFO("total time");
+    for (int i = 0; i < ite; ++i) {
+        gpt.forward(&output_tensors, &input_tensors, &gpt_weights);
+    }
 
     cudaDeviceSynchronize();
     gettimeofday(&end, NULL);

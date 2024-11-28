@@ -920,7 +920,8 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
         microbatch_should_stop_[microbatch] = false;
     }
 
-    for (step_ = step_start; step_ < (int)gen_len; step_++) {
+    // for (step_ = step_start; step_ < (int)gen_len; step_++) {
+    for (step_ = step_start; step_ < 9; step_++) {
         // Loop body produces Nth token by embedding && encoding token (N-1)
         // if necessary.
         const bool fill_caches_only = continue_gen && (step_ < max_context_len);
@@ -1141,6 +1142,9 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                 dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
                 generation_should_stop &= subbatch_should_stop;
                 microbatch_should_stop_[ite] = subbatch_should_stop;
+                print_to_screen(output_ids_buf_, 100);
+                exit(0);
+
             } else {
                 // for other ranks, they cannot update generation_should_stop by DynamicDecode, set to false directly;
                 generation_should_stop &= microbatch_should_stop_[ite];

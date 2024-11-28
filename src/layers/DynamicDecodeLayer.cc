@@ -2,6 +2,7 @@
 #include "layers/sampling_layers/TopKSamplingLayer.h"
 #include "layers/sampling_layers/TopPSamplingLayer.h"
 #include "kernels/ban_bad_words.h"
+#include "kernels/stop_criteria_kernels.h"
 
 namespace space_llm {
 
@@ -412,7 +413,11 @@ void DynamicDecodeLayer<T>::forward(TensorMap *output_tensors,
         //      topp_decode handles [x, 0.5, x]
         // where "x" are skipped.
         topk_decode_->forward(&decode_output_tensors, &decode_input_tensors);
+        print_to_screen(output_tensors->at("output_ids").getPtr<int>(), 100);
+        printf("-----------------------------------------------------------\n");
         topp_decode_->forward(&decode_output_tensors, &decode_input_tensors);
+        print_to_screen(output_tensors->at("output_ids").getPtr<int>(), 100);
+        exit(0);
     }
 
     if (input_tensors->isExist("stop_words_list")) {
@@ -436,12 +441,12 @@ void DynamicDecodeLayer<T>::forward(TensorMap *output_tensors,
     }
 
     if (input_tensors->isExist("sequence_limit_length")) {
-        // invokeLengthCriterion(
-        //     output_tensors->at("finished").getPtr<bool>(),
-        //     output_tensors->at("should_stop").getPtr<bool>(),
-        //     h_pinned_finished_sum_,
-        //     input_tensors->at("sequence_limit_length").getPtr<const uint32_t>(),
-        //     batch_size, beam_width, step, stream_);
+        invokeLengthCriterion(
+            output_tensors->at("finished").getPtr<bool>(),
+            output_tensors->at("should_stop").getPtr<bool>(),
+            h_pinned_finished_sum_,
+            input_tensors->at("sequence_limit_length").getPtr<const uint32_t>(),
+            batch_size, beam_width, step, stream_);
     }
 }
 
