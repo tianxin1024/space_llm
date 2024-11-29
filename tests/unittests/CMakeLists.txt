@@ -10,7 +10,8 @@ FetchContent_MakeAvailable(googletest)
 add_executable(unittest 
     test_tensor.cu
     test_int8.cu
-    test_attention_kernels.cu)
+    test_attention_kernels.cu
+    test_sampling_kernels.cu)
 
 # automatic discovery of unit tests
 target_link_libraries(unittest PUBLIC "${TORCH_LIBRARIES}" gtest_main)
@@ -24,6 +25,9 @@ target_link_libraries(  # Libs for test_int8
 
 target_link_libraries(  # Libs for test_tensor 
   unittest PUBLIC tensor cuda_utils logger)
+
+target_link_libraries( # Libs for test_sampling_kernels
+  unittest PUBLIC tensor sampling_topk_kernels sampling_topp_kernels cuda_utils logger)
 
 add_executable(test_activation test_activation.cu)
 target_link_libraries(test_activation PUBLIC -lcublas -lcublasLt -lcudart

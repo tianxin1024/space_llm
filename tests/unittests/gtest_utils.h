@@ -129,9 +129,9 @@ bool checkResult(std::string name, T *out, T *ref, size_t size,
 }
 
 template <typename T>
-void initRandomInt(T *ptr, size_t size, float minval, float maxval) {
+void initRandom(T *ptr, size_t size, float minval, float maxval) {
     for (size_t i = 0; i < size; ++i) {
-        float val = static_cast<float>(rand() / static_cast<float>(RAND_MAX));
+        float val = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
         val *= (maxval - minval);
         ptr[i] = static_cast<T>(minval + val);
     }
