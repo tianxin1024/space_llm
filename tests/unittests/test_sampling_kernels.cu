@@ -270,4 +270,20 @@ TYPED_TEST(TopPSamplingKernelTest, CorrectnessSmallP) {
     this->runTest({6, 4, 1, 0, 0.2f, 1});
 };
 
+TYPED_TEST(TopPSamplingKernelTest, CorrectnessLargeP) {
+    this->runTest({6, 4, 1, 0, 0.9f, 1});
+};
+
+TYPED_TEST(TopPSamplingKernelTest, CorrectnessAncestral) {
+    this->runTest({6, 4, 1, 0, 1.0f, 1});
+};
+
+TYPED_TEST(TopPSamplingKernelTest, CorrectnessLargeVocabSmallP) {
+    this->runTest({32, 51200, 1, 0, 0.2f, 16});
+};
+
+TYPED_TEST(TopPSamplingKernelTest, CorrectnessLargeVocabLargeP) {
+    this->runTest({32, 51200, 1, 0, 0.9f, 16});
+};
+
 } // end of namespace
