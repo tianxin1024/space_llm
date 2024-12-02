@@ -42,13 +42,13 @@ public:
         if (isExist(ptr_address)) {
             ReallocType realloc_type = isReMalloc(ptr_address, size);
             if (realloc_type == ReallocType::INCREASE) {
-                QK_LOG_DEBUG("ReMalloc the buffer %p since it is too small.", void_ptr);
+                // QK_LOG_DEBUG("ReMalloc the buffer %p since it is too small.", void_ptr);
                 free((void **)(&void_ptr), is_host);
                 return malloc(size, is_set_zero, is_host);
             }
 #if !defined(CUDA_MEMORY_POOL_DISABLED)
             else if (realloc_type == ReallocType::DECREASE) {
-                QK_LOG_DEBUG("ReMalloc the buffer %p to release unused memory to memory pools.", void_ptr);
+                // QK_LOG_DEBUG("ReMalloc the buffer %p to release unused memory to memory pools.", void_ptr);
                 free((void **)(&void_ptr), is_host);
                 return malloc(size, is_set_zero, is_host);
             }
@@ -61,7 +61,7 @@ public:
                 return void_ptr;
             }
         } else {
-            QK_LOG_DEBUG("Cannot find buffer %p, mallocing new one.", void_ptr);
+            // QK_LOG_DEBUG("Cannot find buffer %p, mallocing new one.", void_ptr);
             return malloc(size, is_set_zero, is_host);
         }
     }
@@ -159,7 +159,7 @@ public:
             check_cuda_error(cudaMemsetAsync(ptr, 0, (size_t)(ceil(size / 32.)) * 32, stream_));
         }
         check_cuda_error(getSetDevice(o_device));
-        QK_LOG_DEBUG("malloc buffer %p with size %ld", ptr, size);
+        // QK_LOG_DEBUG("malloc buffer %p with size %ld", ptr, size);
 
         pointer_mapping_->insert({getAddress(ptr), size});
 

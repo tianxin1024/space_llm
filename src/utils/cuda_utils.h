@@ -144,6 +144,13 @@ void print_abs_mean(const T *buf, uint size, cudaStream_t stream, std::string na
 template <typename T>
 void print_to_screen(const T *result, const int size);
 
+template <typename T>
+void printMatrix(T *ptr, int m, int k, int stride, bool is_device_ptr);
+
+void printMatrix(unsigned long long *ptr, int m, int k, int stride, bool is_device_ptr);
+void printMatrix(int *ptr, int m, int k, int stride, bool is_device_ptr);
+void printMatrix(size_t *ptr, int m, int k, int stride, bool is_device_ptr);
+
 [[noreturn]] inline void throwRuntimeError(const char *const file, int const line, std::string const &info = "") {
     throw std::runtime_error(std::string("[QK][ERROR] ") + info + " Assertion fail: " + file + ":"
                              + std::to_string(line) + " \n");

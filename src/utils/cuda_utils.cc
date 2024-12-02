@@ -73,6 +73,45 @@ template void print_to_screen(const int *result, const int size);
 template void print_to_screen(const uint *result, const int size);
 template void print_to_screen(const bool *result, const int size);
 
+template <typename T>
+void printMatrix(T *ptr, int m, int k, int stride, bool is_device_ptr) {
+    T *tmp;
+    if (is_device_ptr) {
+        // k < stride ; stride = col-dimension.
+        tmp = reinterpret_cast<T *>(malloc(m * stride * sizeof(T)));
+        check_cuda_error(cudaMemcpy(tmp, ptr, sizeof(T) * m * stride, cudaMemcpyDeviceToHost));
+        cudaDeviceSynchronize();
+    } else {
+        tmp = ptr;
+    }
+
+    for (int ii = -1; ii < m; ++ii) {
+        if (ii >= 0) {
+            printf("%02d ", ii);
+        } else {
+            printf("   ");
+        }
+
+        for (int jj = 0; jj < k; jj += 1) {
+            if (ii >= 0) {
+                printf("%7.3f ", (float)tmp[ii * stride + jj]);
+            } else {
+                printf("%7d ", jj);
+            }
+        }
+        printf("\n");
+    }
+    if (is_device_ptr) {
+        free(tmp);
+    }
+}
+
+template void printMatrix(float *ptr, int m, int k, int stride, bool is_device_ptr);
+template void printMatrix(half *ptr, int m, int k, int stride, bool is_device_ptr);
+#ifdef ENABLE_BF16
+template void printMatrix(__nv_bfloat16 *ptr, int m, int k, int stride, bool is_device_ptr);
+#endif
+
 /* ***************************** common utils ****************************** */
 
 cudaError_t getSetDevice(int i_device, int *o_device) {
