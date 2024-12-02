@@ -13,6 +13,8 @@ add_executable(unittest
     test_attention_kernels.cu
     test_sampling_kernels.cu)
 
+add_executable(sampling_layer test_sampling_layer.cu)
+
 # automatic discovery of unit tests
 target_link_libraries(unittest PUBLIC "${TORCH_LIBRARIES}" gtest_main)
 target_compile_features(unittest PRIVATE cxx_std_14)
@@ -28,6 +30,11 @@ target_link_libraries(  # Libs for test_tensor
 
 target_link_libraries( # Libs for test_sampling_kernels
   unittest PUBLIC tensor sampling_topk_kernels sampling_topp_kernels cuda_utils logger)
+
+target_link_libraries(
+    sampling_layer PUBLIC -lcudart -lcublas -lcublasLt cublasMMWrapper memory_utils 
+    tensor gtest_main sampling_topk_kernels cuda_utils logger
+    DynamicDecodeLayer)
 
 add_executable(test_activation test_activation.cu)
 target_link_libraries(test_activation PUBLIC -lcublas -lcublasLt -lcudart

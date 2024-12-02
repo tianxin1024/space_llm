@@ -36,6 +36,9 @@ test_gemm:
 unittest :
 	@cd build/bin && ./unittest
 
+sampling_layer:
+	@cd build/bin && ./sampling_layer
+
 test_activation:
 	@cd build/bin && ./test_activation
 
