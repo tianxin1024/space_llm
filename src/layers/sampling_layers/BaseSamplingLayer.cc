@@ -314,7 +314,6 @@ void BaseSamplingLayer<T>::forward(TensorMap *output_tensors, TensorMap *input_t
         freeBuffer();
     }
     sync_check_cuda_error();
-    QK_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template class BaseSamplingLayer<float>;

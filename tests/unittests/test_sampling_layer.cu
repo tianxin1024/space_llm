@@ -42,7 +42,7 @@ template <typename T>
 class SamplingDecodeTest : public testing::Test {
 protected:
     unsigned long long seed = 0;
-    const static unsigned long long max_seed = 1;
+    const static unsigned long long max_seed = 30;
     const size_t batch_size = 6;
     const size_t beam_width = 1;
     const size_t batchxbeam = batch_size * beam_width;

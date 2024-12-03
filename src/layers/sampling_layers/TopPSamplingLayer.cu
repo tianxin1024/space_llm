@@ -276,7 +276,6 @@ void TopPSamplingLayer<T>::runSampling(TensorMap *output_tensors, TensorMap *inp
                     log probs at the current step.
     **/
 
-    QK_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
     QK_CHECK(input_tensors->size() >= 4);
     QK_CHECK(output_tensors->size() >= 1);
 

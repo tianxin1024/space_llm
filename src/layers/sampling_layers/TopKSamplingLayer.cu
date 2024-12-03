@@ -149,7 +149,6 @@ void TopKSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     //     runtime_top_p [1] or [batch_size] on cpu, optional, float.
     //     temperature [1] or [batch_size] on cpu, optional
     //     repetition_penalty [1] or [batch_size] on cpu, optional
-    QK_LOG_DEBUG(__PRETTY_FUNCTION__);
     BaseSamplingLayer<T>::setup(batch_size, beam_width, runtime_args);
 
     uint tmp_top_k = 0;
