@@ -30,7 +30,7 @@ void DynamicDecodeLayer<T>::initialize() {
                                             false,
                                             cuda_device_prop_);
 
-    // TODO tianxin ...
+    allocateBuffer();
 }
 template <typename T>
 DynamicDecodeLayer<T>::DynamicDecodeLayer(size_t vocab_size,
@@ -413,11 +413,7 @@ void DynamicDecodeLayer<T>::forward(TensorMap *output_tensors,
         //      topp_decode handles [x, 0.5, x]
         // where "x" are skipped.
         topk_decode_->forward(&decode_output_tensors, &decode_input_tensors);
-        print_to_screen(output_tensors->at("output_ids").getPtr<int>(), 100);
-        printf("-----------------------------------------------------------\n");
         topp_decode_->forward(&decode_output_tensors, &decode_input_tensors);
-        print_to_screen(output_tensors->at("output_ids").getPtr<int>(), 100);
-        exit(0);
     }
 
     if (input_tensors->isExist("stop_words_list")) {

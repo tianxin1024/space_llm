@@ -24,6 +24,9 @@ build:
 debug_cuda:
 	@cd debug/gpt && cuda-gdb -x ./cuda_gpt_demo.gdb
 
+debug_test:
+	@cd debug/test && gdb -x ./sampling_layer.gdb
+
 run :
 	@cd build/bin && ./$(PRO) 
 

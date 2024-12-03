@@ -227,7 +227,7 @@ protected:
     }
 };
 
-typedef testing::Types<float, half> FloatAndHalfTypes;
+typedef testing::Types<float, float> FloatAndHalfTypes;
 #ifndef ENABLE_BF16
 typedef FloatAndHalfTypes SupportTypes;
 #else

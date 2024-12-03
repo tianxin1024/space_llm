@@ -1142,8 +1142,6 @@ void Gpt<T>::forward(std::unordered_map<std::string, Tensor> *output_tensors,
                 dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
                 generation_should_stop &= subbatch_should_stop;
                 microbatch_should_stop_[ite] = subbatch_should_stop;
-                print_to_screen(output_ids_buf_, 100);
-                exit(0);
 
             } else {
                 // for other ranks, they cannot update generation_should_stop by DynamicDecode, set to false directly;

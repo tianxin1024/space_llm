@@ -33,7 +33,7 @@ target_link_libraries( # Libs for test_sampling_kernels
 
 target_link_libraries(
     sampling_layer PUBLIC -lcudart -lcublas -lcublasLt cublasMMWrapper memory_utils 
-    tensor gtest_main sampling_topk_kernels cuda_utils logger
+    tensor gtest_main TopKSamplingLayer TopPSamplingLayer cuda_utils logger
     DynamicDecodeLayer)
 
 add_executable(test_activation test_activation.cu)

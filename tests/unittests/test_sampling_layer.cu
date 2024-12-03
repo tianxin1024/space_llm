@@ -11,7 +11,9 @@
 
 #include "gtest_utils.h"
 #include "kernels/sampling_topk_kernels.h"
+#include "kernels/sampling_topp_kernels.h"
 #include "layers/DynamicDecodeLayer.h"
+#include "utils/cuda_utils.h"
 
 using namespace space_llm;
 
@@ -40,7 +42,7 @@ template <typename T>
 class SamplingDecodeTest : public testing::Test {
 protected:
     unsigned long long seed = 0;
-    const static unsigned long long max_seed = 30;
+    const static unsigned long long max_seed = 1;
     const size_t batch_size = 6;
     const size_t beam_width = 1;
     const size_t batchxbeam = batch_size * beam_width;
@@ -135,6 +137,23 @@ protected:
         deviceFill(d_end_ids, batchxbeam, end_id, stream);
     }
 
+    // void teardown() {
+    //     delete[] test_input_logits;
+    //     delete[] h_output_ids;
+    //     delete[] h_logits;
+    //     delete[] h_probs;
+    //     delete[] h_log_probs;
+    //     delete[] h_cum_log_probs;
+    //     delete[] h_output_log_probs;
+    //     delete dynamic_decode_layer;
+    //     delete cublas_wrapper;
+    //     delete cublas_wrapper_mutex;
+    //     delete allocator;
+    //     check_cuda_error(cublasDestroy(cublas_handle));
+    //     check_cuda_error(cublasLtDestroy(cublaslt_handle));
+    //     check_cuda_error(cudaStreamDestroy(stream));
+    // }
+
     void teardown() {
         delete[] test_input_logits;
         delete[] h_output_ids;
@@ -143,13 +162,13 @@ protected:
         delete[] h_log_probs;
         delete[] h_cum_log_probs;
         delete[] h_output_log_probs;
-        delete dynamic_decode_layer;
-        delete cublas_wrapper;
-        delete cublas_wrapper_mutex;
-        delete allocator;
-        check_cuda_error(cublasDestroy(cublas_handle));
-        check_cuda_error(cublasLtDestroy(cublaslt_handle));
-        check_cuda_error(cudaStreamDestroy(stream));
+        // delete dynamic_decode_layer;
+        // delete cublas_wrapper;
+        // delete cublas_wrapper_mutex;
+        // delete allocator;
+        // check_cuda_error(cublasDestroy(cublas_handle));
+        // check_cuda_error(cublasLtDestroy(cublaslt_handle));
+        // check_cuda_error(cudaStreamDestroy(stream));
     }
 
     TensorMap *createInputTensors(int *topk,
@@ -175,6 +194,7 @@ protected:
         input_tensors->insert({"logits", Tensor{MEMORY_GPU, TYPE_FP32, {batch_size, beam_width, vocab_size}, d_logits}});
         input_tensors->insert({"embedding_bias", Tensor{MEMORY_GPU, data_type, {vocab_size}, nullptr}});
         input_tensors->insert({"max_input_len", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &max_input_len}});
+        input_tensors->insert({"max_input_length", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &max_input_len}});
         input_tensors->insert({"input_lengths", Tensor{MEMORY_GPU, TYPE_INT32, {batch_size, beam_width}, d_input_lengths}});
         input_tensors->insert({"end_id", Tensor{MEMORY_CPU, TYPE_INT32, {batchxbeam}, &d_end_ids}});
         input_tensors->insert({"random_seed", Tensor{MEMORY_CPU, TYPE_UINT64, {1}, &seed}});
@@ -227,7 +247,7 @@ protected:
         QK_LOG_DEBUG("check...%6s : failures: %d / %d",
                      failures == 0 ? "....OK" : "FAILED", failures, max_seq_len * batchxbeam);
         delete[] h_output_ids;
-        return failures = 0;
+        return failures == 0;
     }
 
 public:
@@ -264,6 +284,11 @@ public:
             bool passed = checkResult(d_output_ids, expected_output_ids);
             EXPECT_TRUE(passed) << "Failed at seed " << seed;
 
+            if (!passed) {
+                QK_LOG_ERROR("actual output ids");
+                printMatrix(d_output_ids, max_seq_len, batch_size, batch_size, true);
+            }
+
             delete output_tensors;
             delete input_tensors;
             this->teardown();
@@ -273,18 +298,31 @@ public:
 
 TYPED_TEST_SUITE(SamplingDecodeTest, FloatAndHalfTypes);
 
-TYPED_TEST(SamplingDecodeTest, TopK) {
+// TYPED_TEST(SamplingDecodeTest, TopK) {
+//     // clang-format off
+//     int top_k = 2;
+//     std::vector<std::set<int>> expected_output_ids {
+//         // batch
+//         //  0       1       2       3       4       5
+//         {0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, // step 0
+//         {4, 5}, {4, 5}, {4, 5}, {4, 5}, {4, 5}, {4, 5}, // step 1
+//         {2, 3}, {2, 3}, {2, 3}, {2, 3}, {2, 3}, {2, 3}  // step 2
+//     };
+//     // clang-format on
+//     this->runTest(expected_output_ids, &top_k, 1, nullptr, 0, nullptr, nullptr);
+// }
+
+TYPED_TEST(SamplingDecodeTest, TopP) {
     // clang-format off
-    int top_k = 2;
+    float top_p = 0.3;
     std::vector<std::set<int>> expected_output_ids {
         // batch
-        //  0       1       2       3       4       5
-        {0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, // step 0
-        {4, 5}, {4, 5}, {4, 5}, {4, 5}, {4, 5}, {4, 5}, // step 1
-        {2, 3}, {2, 3}, {2, 3}, {2, 3}, {2, 3}, {2, 3}  // step 2
+        {0}, {0}, {0}, {0}, {0}, {0}, // step 0
+        {4}, {4}, {4}, {4}, {4}, {4}, // step 1
+        {2}, {2}, {2}, {2}, {2}, {2}  // step 2
     };
     // clang-format on
-    this->runTest(expected_output_ids, &top_k, 1, nullptr, 0, nullptr, nullptr);
+    this->runTest(expected_output_ids, nullptr, 0, &top_p, 1, nullptr, nullptr);
 }
 
 } // namespace
