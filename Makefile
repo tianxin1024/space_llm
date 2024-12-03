@@ -27,8 +27,11 @@ debug_cuda:
 debug_test:
 	@cd debug/test && gdb -x ./sampling_layer.gdb
 
+# run :
+# 	@cd build/bin && ./$(PRO) 
+
 run :
-	@cd build/bin && ./$(PRO) 
+	@cd build/bin && ./decoding_example 4 1 8 64 2048 30000 6 32 32 512 0 0.6 1
 
 debug :
 	cd debug/gpt && gdb -x ./gpt_demo.gdb
