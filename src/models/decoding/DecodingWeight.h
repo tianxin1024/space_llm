@@ -1,6 +1,7 @@
 #pragma once
 
 #include "models/decoding/DecoderLayerWeight.h"
+#include "utils/memory_utils.h"
 
 namespace space_llm {
 
@@ -31,7 +32,7 @@ struct DecodingWeight {
         if (is_maintain_buffer == true) {
             decoder_layer_weights.clear();
             for (int i = 0; i < 6; ++i) {
-                deviceFree(weights_ptr);
+                deviceFree(weights_ptr[i]);
             }
 
             position_encoding_table = nullptr;

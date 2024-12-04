@@ -4,6 +4,7 @@
 #include "utils/cublasMMWrapper.h"
 #include "models/decoding/DecodingWeight.h"
 #include "layers/DynamicDecodeLayer.h"
+#include "models/decoding/Decoder.h"
 
 namespace space_llm {
 
