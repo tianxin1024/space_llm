@@ -1,4 +1,5 @@
 #include "models/decoding/Decoding.h"
+#include "models/decoding/Decoder.h"
 
 namespace space_llm {
 

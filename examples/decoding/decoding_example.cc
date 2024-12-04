@@ -4,6 +4,20 @@
 
 using namespace space_llm;
 
+template <typename T>
+int decodingExample(const size_t batch_size,
+                    const size_t beam_width,
+                    const size_t head_num,
+                    const size_t size_per_head,
+                    const size_t inter_size,
+                    const size_t vocab_size,
+                    const size_t num_layers,
+                    const size_t max_seq_len,
+                    const size_t memory_max_seq_len,
+                    const size_t memory_hidden_units,
+                    const int top_k,
+                    const int top_p);
+
 int main(int argc, char **argv) {
     if (argc != 14) {
         printf("[ERROR] decoding_example batch_size beam_width head_num size_per_head inter_size vocab_size"
@@ -103,4 +117,27 @@ int decodingExample(const size_t batch_size,
 
     DecodingWeight<T> decoding_weights(
         hidden_units, inter_size, vocab_size, num_layers, max_seq_len, memory_hidden_units);
+
+    Decoding<T> decoding = Decoding<T>(batch_size,
+                                       max_seq_len,
+                                       memory_max_seq_len,
+                                       beam_width,
+                                       head_num,
+                                       size_per_head,
+                                       inter_size,
+                                       num_layers,
+                                       vocab_size,
+                                       start_id,
+                                       end_id,
+                                       0.0f,
+                                       top_k,
+                                       top_p,
+                                       1.0,  // temperature
+                                       1.0f, // len_penalty
+                                       1.0,  // repetition_penalty
+                                       stream,
+                                       &cublas_wrapper,
+                                       &allocator,
+                                       false,
+                                       &prop);
 }
