@@ -86,4 +86,7 @@ DecoderCrossAttentionLayer<T>::~DecoderCrossAttentionLayer() {
     freeBuffer();
 }
 
+template class DecoderCrossAttentionLayer<float>;
+template class DecoderCrossAttentionLayer<half>;
+
 } // namespace space_llm
