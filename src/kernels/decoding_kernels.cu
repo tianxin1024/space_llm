@@ -262,6 +262,72 @@ INSTANTIATE_LOOKUP_POS_ENCODING_PAD_COUNT(float);
 INSTANTIATE_LOOKUP_POS_ENCODING_PAD_COUNT(half);
 #undef INSTANTIATE_LOOKUP_POS_ENCODING_PAD_COUNT
 
+template <typename T>
+__global__ void paddingEmbedding(T *padded_embedding_kernel,
+                                 T *padded_embedding_bias,
+                                 const T *embedding_kernel,
+                                 const T *embedding_bias,
+                                 const int64_t hidden_units,
+                                 const int64_t vocab_size,
+                                 const int64_t vocab_size_padded) {
+    for (int64_t id = threadIdx.x + blockIdx.x * blockDim.x; id < hidden_units * vocab_size_padded;
+         id += blockDim.x * gridDim.x) {
+        int row_id = id / vocab_size_padded;
+        int col_id = id % vocab_size_padded;
+        if (col_id < vocab_size) {
+            padded_embedding_kernel[id] = embedding_kernel[row_id * vocab_size + col_id];
+        } else {
+            padded_embedding_kernel[id] = (T)(0.0f);
+        }
+    }
+
+    for (int id = threadIdx.x + blockIdx.x * blockDim.x; id < vocab_size_padded; id += blockDim.x * gridDim.x) {
+        if (id < vocab_size) {
+            padded_embedding_bias[id] = embedding_bias[id];
+        } else {
+            padded_embedding_bias[id] = (T)(0.0f);
+        }
+    }
+}
+
+template <typename T>
+void invokePaddingEmbedding(T *padded_embedding_kernel,
+                            T *padded_embedding_bias,
+                            const T *embedding_kernel,
+                            const T *embedding_bias,
+                            const int hidden_units,
+                            const int vocab_size,
+                            const int vocab_size_padded,
+                            cudaStream_t stream) {
+    dim3 block(512);
+    dim3 grid((int)(ceil(hidden_units * vocab_size_padded / 512.)));
+    paddingEmbedding<<<grid, block, 0, stream>>>(padded_embedding_kernel,
+                                                 padded_embedding_bias,
+                                                 embedding_kernel,
+                                                 embedding_bias,
+                                                 hidden_units,
+                                                 vocab_size,
+                                                 vocab_size_padded);
+}
+
+template void invokePaddingEmbedding(float *padded_embedding_kernel,
+                                     float *padded_embedding_bias,
+                                     const float *embedding_kernel,
+                                     const float *embedding_bias,
+                                     const int hidden_units,
+                                     const int vocab_size,
+                                     const int vocab_size_padded,
+                                     cudaStream_t stream);
+
+template void invokePaddingEmbedding(half *padded_embedding_kernel,
+                                     half *padded_embedding_bias,
+                                     const half *embedding_kernel,
+                                     const half *embedding_bias,
+                                     const int hidden_units,
+                                     const int vocab_size,
+                                     const int vocab_size_padded,
+                                     cudaStream_t stream);
+
 __global__ void gatherTree(gatherTreeParam param) {
     //  PREFIX SOFT PROMPT
     //  beam: have six parts

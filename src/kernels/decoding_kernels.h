@@ -61,6 +61,16 @@ void invokeEmbeddingLookupPosEncodingPadCount(T *from_tensor,
                                              stream);
 }
 
+template <typename T>
+void invokePaddingEmbedding(T *padded_embedding_kernel,
+                            T *padded_embedding_bias,
+                            const T *embedding_kernel,
+                            const T *embedding_bias,
+                            const int hidden_units,
+                            const int vocab_size,
+                            const int vocab_size_padded,
+                            cudaStream_t stream);
+
 void invokeGatherTree(int *beams,
                       int *max_sequence_lengths,
                       const int max_time,

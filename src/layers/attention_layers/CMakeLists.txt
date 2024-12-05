@@ -15,6 +15,11 @@ set_property(TARGET DecoderSelfAttentionLayer PROPERTY POSITION_INDEPENDENT_CODE
 set_property(TARGET DecoderSelfAttentionLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(DecoderSelfAttentionLayer PUBLIC -lcublas -lcudart cublasMMWrapper memory_utils decoder_masked_multihead_attention tensor)
 
+add_library(DecoderCrossAttentionLayer STATIC DecoderCrossAttentionLayer.cc)
+set_property(TARGET DecoderCrossAttentionLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
+set_property(TARGET DecoderCrossAttentionLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+target_link_libraries(DecoderCrossAttentionLayer PUBLIC -lcublas -lcudart cublasMMWrapper memory_utils tensor)
+
 add_library(TensorParallelDecoderSelfAttentionLayer STATIC TensorParallelDecoderSelfAttentionLayer.cc)
 set_property(TARGET TensorParallelDecoderSelfAttentionLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET TensorParallelDecoderSelfAttentionLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)

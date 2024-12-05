@@ -64,7 +64,7 @@ private:
 protected:
     T *padded_embedding_kernel_ = nullptr;
     T *padded_embedding_bias_ = nullptr;
-    const T *padded_embedding_kernel_ptr = nullptr;
+    const T *padded_embedding_kernel_ptr_ = nullptr;
     const T *padded_embedding_bias_ptr_ = nullptr;
 
     T *decoder_input_buf_ = nullptr;
