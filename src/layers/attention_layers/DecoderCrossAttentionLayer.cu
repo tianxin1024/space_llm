@@ -7,6 +7,49 @@ const bool ATTENTION_OPT = true;
 const int ATTENTION_BLOCK_SIZE = 256;
 
 template <typename T>
+void DecoderCrossAttentionLayer<T>::allocateBuffer() {
+    QK_CHECK(false);
+    if (is_allocate_buffer_ == false) {
+        q_buf_ = reinterpret_cast<T *>(allocator_->reMalloc(q_buf_, sizeof(T) * max_batch_size_ * hidden_units_, false));
+        context_buf_ = reinterpret_cast<T *>(
+            allocator_->reMalloc(context_buf_, sizeof(T) * max_batch_size_ * hidden_units_, false));
+
+        if (is_batch_major_cache_) {
+            mem_cache_buf_ = reinterpret_cast<T *>(allocator_->reMalloc(
+                mem_cache_buf_, sizeof(T) * max_batch_size_ * max_mem_seq_len_ * hidden_units_, false));
+        }
+
+        is_allocate_buffer_ = true;
+    }
+}
+
+template <typename T>
+void DecoderCrossAttentionLayer<T>::allocateBuffer(size_t batch_size, size_t max_mem_seq_len) {
+    q_buf_ = reinterpret_cast<T *>(allocator_->reMalloc(q_buf_, sizeof(T) * batch_size * hidden_units_, false));
+    context_buf_ = reinterpret_cast<T *>(
+        allocator_->reMalloc(context_buf_, sizeof(T) * batch_size * hidden_units_, false));
+
+    if (is_batch_major_cache_) {
+        mem_cache_buf_ = reinterpret_cast<T *>(allocator_->reMalloc(
+            mem_cache_buf_, sizeof(T) * batch_size * max_mem_seq_len * hidden_units_, false));
+    }
+
+    is_allocate_buffer_ = true;
+}
+
+template <typename T>
+void DecoderCrossAttentionLayer<T>::freeBuffer() {
+    if (is_allocate_buffer_) {
+        allocator_->free((void **)(&q_buf_));
+        allocator_->free((void **)(&context_buf_));
+        if (is_batch_major_cache_) {
+            allocator_->free((void **)(&mem_cache_buf_));
+        }
+        is_allocate_buffer_ = false;
+    }
+}
+
+template <typename T>
 DecoderCrossAttentionLayer<T>::DecoderCrossAttentionLayer(size_t max_batch_size,
                                                           size_t head_num,
                                                           size_t size_per_head,
@@ -84,6 +127,26 @@ template <typename T>
 DecoderCrossAttentionLayer<T>::~DecoderCrossAttentionLayer() {
     cublas_wrapper_ = nullptr;
     freeBuffer();
+}
+
+template <typename T>
+void DecoderCrossAttentionLayer<T>::forward(TensorMap *output_tensors,
+                                            TensorMap *input_tensors,
+                                            const AttentionWeight<T> *attention_weights) {
+    // input tensors:
+    //      attention_input [batch_size, d_model],
+    //      encoder_output [batch_size, mem_max_seq_len, memory_d_model],
+    //      encoder_sequence_length [batch_size],
+    //      step [1] on cpu
+    //      finished [batch_size] (optional)
+    //      ia3_tasks [batch_size] (optional)
+
+    // output tensors:
+    //      decoder_layer_output [batch_size, d_model],
+    //      key_mem_cache [batch_size, head_num, size_per_head // x, mem_max_seq_len, x], where x = 16 / sizeof(T)
+    //      value_mem_cache [batch_size, head_num, mem_max_seq_len, size_per_head]
+    //      cross_attentions [batch_size, head_num, max_decoder_seq_len, mem_max_seq_len] optional float*
+    allocateBuffer(input_tensors->at("input_query").shape[0], input_tensors->at("encoder_output").shape[1]);
 }
 
 template class DecoderCrossAttentionLayer<float>;
