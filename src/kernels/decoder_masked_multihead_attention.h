@@ -126,3 +126,11 @@ struct Multihead_attention_params<T, true> : public Multihead_attention_params_b
 
 template <class T>
 using Masked_multihead_attention_params = Multihead_attention_params<T, false>;
+
+template <typename T>
+struct outputCrossAttentionParam {
+    // max decoder output length
+    int max_decoder_seq_len = 0;
+    T *cross_attention_out = nullptr;
+    bool is_return_cross_attentions = false;
+};

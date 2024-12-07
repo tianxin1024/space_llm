@@ -1,6 +1,7 @@
 #pragma once
 
 #include "layers/attention_layers/BaseAttentionLayer.h"
+#include "kernels/decoder_masked_multihead_attention.h"
 
 namespace space_llm {
 
