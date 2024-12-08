@@ -1,6 +1,7 @@
 #include <cub/cub.cuh>
 
 #include "layers/attention_layers/DecoderCrossAttentionLayer.h"
+#include "kernels/decoder_masked_multihead_attention.h"
 #include "kernels/reduce_kernel_utils.cuh"
 #include "utils/cuda_type_utils.cuh"
 
@@ -20,6 +21,117 @@ using Copy_half_t = typename std::conditional<
 
 template <typename T, int ELEMENTS_PER_WARP_LOAD>
 using Copy_t = Copy_half_t<sizeof(T) / sizeof(half) * ELEMENTS_PER_WARP_LOAD>;
+
+template <typename T>
+__global__ void cross_attention_kernel(T *query_buf,
+                                       const T *Q_bias,
+                                       T *key_cache,
+                                       const T *K_bias,
+                                       T *value_cache,
+                                       const T *V_bias,
+                                       const int *length_per_sample,
+                                       T *context_buf,
+                                       const bool *finished,
+                                       int batch_size,
+                                       int head_num,
+                                       int size_per_head,
+                                       int step,
+                                       const int seq_len,
+                                       const T scalar,
+                                       const int *ia3_tasks,
+                                       const T *ia3_key_weights, const T *ia3_value_weights) {
+    if (finished != nullptr && finished[blockIdx.x / head_num] == true) {
+        return;
+    }
+    int tid = threadIdx.x;
+    int bid = blockIdx.x / head_num;
+    int head_id = blockIdx.x % head_num;
+
+    const bool do_ia3 = step == 1 && ia3_tasks != nullptr;
+    const int ia3_task = do_ia3 ? ia3_tasks[bid] : 0;
+
+    extern __shared__ __align__(sizeof(float)) unsigned s_buf[]; // align on largest type
+    T *sq = reinterpret_cast<T *>(s_buf);
+    T *logits = reinterpret_cast<T *>(&sq[size_per_head]);
+
+    int length = __ldg(&length_per_sample[bid]);
+
+    int qkv_id = bid * head_num * size_per_head + head_id * size_per_head + tid;
+    int qkv_bias_id = head_id * size_per_head + tid;
+
+    if (tid < size_per_head) {
+        sq[tid] = add(query_buf[qkv_id], Q_bias[qkv_bias_id]);
+    }
+    __syncthreads();
+
+    for (int ite = 0; ite < length; ++ite) {
+        int key_id = bid * (seq_len * head_num * size_per_head) + ite * (head_num * size_per_head)
+                     + head_id * size_per_head + tid;
+
+        T key = tid < size_per_head ? key_cache[key_id] : (T)(0.0f);
+
+        // For the first step, we should add bias to key memory cache.
+        // The KV memory cache only need to be updated at the first step.
+        if (step == 1 && tid < size_per_head) {
+            key = add(key, K_bias[head_id * size_per_head + tid]);
+            if (do_ia3) {
+                key = mmha::mul<T, T, T>(key, ia3_key_weights[(ia3_task * head_num + head_id) * size_per_head + tid]);
+            }
+            key_cache[key_id] = key;
+        }
+
+        T val = (tid < size_per_head) ? mul(key, sq[tid], scalar) : (T)(0.0f);
+        T qk = blockReduceSum(val);
+        if (threadIdx.x == 0) {
+            logits[ite] = qk;
+        }
+        __syncthreads(); // try to remove
+    }
+    __syncthreads();
+
+    __shared__ float s_max_val, s_sum;
+
+    float local_i = tid < length ? (float)logits[tid] : -1e20f;
+    float max_val = blockReduceMax(local_i);
+    if (tid == 0) {
+        s_max_val = max_val;
+    }
+    __syncthreads();
+
+    local_i -= s_max_val;
+    float local_o = tid < length ? __expf(local_i) : 0.0f;
+    float val = blockReduceSum(local_o);
+
+    if (tid == 0) {
+        s_sum = val + 1e-6;
+    }
+    __syncthreads();
+    if (tid < length) {
+        logits[tid] = local_o / s_sum;
+    }
+    __syncthreads();
+
+    if (tid < size_per_head) {
+        T sum = (T)0.0f;
+        for (int ite = 0; ite < length; ++ite) {
+            int value_id = bid * seq_len * head_num * size_per_head + ite * head_num * size_per_head
+                           + head_id * size_per_head + tid;
+            T value = value_cache[value_id];
+
+            // for the first step, we should add bias to key memory cache
+            if (step == 1) {
+                value = add(value, V_bias[head_id * size_per_head + tid]);
+                if (do_ia3) {
+                    value = mmha::mul<T, T, T>(
+                        value, ia3_value_weights[(ia3_task * head_num + head_id) * size_per_head + tid]);
+                }
+                value_cache[value_id] = value;
+            }
+            sum = fma(value, logits[ite], sum);
+        }
+        context_buf[bid * head_num * size_per_head + head_id * size_per_head + tid] = sum;
+    }
+}
 
 template <typename T, int size_per_head, int block_sz>
 __global__ void cross_attention_kernel_opt(T *__restrict query_buf,

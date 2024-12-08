@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "kernels/decoder_masked_multihead_attention_utils.h"
+
 #include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
 #include <stdint.h>
