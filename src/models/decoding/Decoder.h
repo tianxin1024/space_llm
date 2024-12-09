@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kernels/add_residual_kernels.h"
 #include "layers/BaseLayer.h"
 #include "layers/attention_layers/DecoderSelfAttentionLayer.h"
 #include "layers/attention_layers/DecoderCrossAttentionLayer.h"

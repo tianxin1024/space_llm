@@ -248,6 +248,40 @@ void Decoder<T>::forward(std::vector<Tensor> *output_tensors,
         cross_attention_layer_->forward(&cross_attention_output_tensors,
                                         &cross_attention_input_tensors,
                                         &decoder_layer_weights->at(l).cross_attention_weights);
+
+        invokeGeneralAddBiasResidualPreLayerNorm(
+            cross_attn_output_,
+            normed_cross_attn_output_,
+            cross_attn_output_,
+            self_attn_output_,
+            decoder_layer_weights->at(l).cross_attn_layernorm_weights.gamma,
+            decoder_layer_weights->at(l).cross_attn_layernorm_weights.beta,
+            decoder_layer_weights->at(l).cross_attention_weights.attention_output_weight.bias,
+            layernorm_eps_,
+            batch_size,
+            hidden_units_,
+            (float *)nullptr,
+            (float *)nullptr,
+            (float *)nullptr,
+            (float *)nullptr,
+            0,
+            stream_);
+        sync_check_cuda_error();
+
+        TensorMap ffn_output_tensors(
+            {{"ffn_output", Tensor{MEMORY_GPU, data_type, {batch_size, hidden_units_}, decoder_output}}});
+        ffn_layer_->forward(&ffn_output_tensors, &ffn_input_tensors, &decoder_layer_weights->at(l).ffn_weights);
+
+        invokeAddBiasResidual(decoder_output,
+                              cross_attn_output_,
+                              decoder_layer_weights->at(l).ffn_weights.output_weight.bias,
+                              batch_size,
+                              hidden_units_,
+                              stream_);
+        sync_check_cuda_error();
+    }
+    if (is_free_buffer_after_forward_ == true) {
+        freeBuffer();
     }
 }
 
