@@ -172,9 +172,11 @@ Decoding<T>::Decoding(size_t max_batch_size,
     size_per_head_(size_per_head),
     inter_size_(inter_size),
     num_layer_(num_layer),
+    vocab_size_(vocab_size),
     start_id_(start_id),
     end_id_(end_id),
     beam_search_diversity_rate_(beam_search_diversity_rate),
+    hidden_units_(head_num_ * size_per_head),
     top_k_(top_k),
     top_p_(top_p),
     temperature_(temperature),
@@ -199,14 +201,17 @@ Decoding<T>::Decoding(Decoding<T> const &decoding) :
     size_per_head_(decoding.size_per_head_),
     inter_size_(decoding.inter_size_),
     num_layer_(decoding.num_layer_),
+    vocab_size_(decoding.vocab_size_),
     start_id_(decoding.start_id_),
     end_id_(decoding.end_id_),
     beam_search_diversity_rate_(decoding.beam_search_diversity_rate_),
+    hidden_units_(decoding.hidden_units_),
     top_k_(decoding.top_k_),
     top_p_(decoding.top_p_),
     temperature_(decoding.temperature_),
     len_penalty_(decoding.len_penalty_),
-    repetition_penalty_(decoding.repetition_penalty_) {
+    repetition_penalty_(decoding.repetition_penalty_),
+    vocab_size_padded_(decoding.vocab_size_padded_) {
     initialize();
 }
 

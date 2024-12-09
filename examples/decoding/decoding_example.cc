@@ -1,6 +1,7 @@
 #include <iostream>
 #include "models/decoding/Decoding.h"
 #include <cuda_profiler_api.h>
+#include <sys/time.h>
 
 using namespace space_llm;
 
@@ -16,7 +17,7 @@ int decodingExample(const size_t batch_size,
                     const size_t memory_max_seq_len,
                     const size_t memory_hidden_units,
                     const int top_k,
-                    const int top_p);
+                    const float top_p);
 
 int main(int argc, char **argv) {
     if (argc != 14) {
@@ -87,7 +88,7 @@ int decodingExample(const size_t batch_size,
                     const size_t memory_max_seq_len,
                     const size_t memory_hidden_units,
                     const int top_k,
-                    const int top_p) {
+                    const float top_p) {
     const size_t hidden_units = head_num * size_per_head;
     const int start_id = 0;
     const int end_id = 1;
@@ -140,4 +141,71 @@ int decodingExample(const size_t batch_size,
                                        &allocator,
                                        false,
                                        &prop);
+    T *d_memory_tensor;
+    int *d_memory_sequence_lengths;
+    deviceMalloc(&d_memory_tensor, memory_hidden_units * memory_max_seq_len * batch_size * beam_width);
+    deviceMalloc(&d_memory_sequence_lengths, batch_size * beam_width);
+    int *h_memory_sequence_lengths = new int[batch_size * beam_width];
+    for (int i = 0; i < (int)(batch_size * beam_width); ++i) {
+        h_memory_sequence_lengths[i] = memory_max_seq_len;
+    }
+    cudaH2Dcpy(d_memory_sequence_lengths, h_memory_sequence_lengths, batch_size * beam_width);
+
+    int *d_output_ids;
+    int *d_parent_ids;
+    int *d_sequence_lengths;
+    deviceMalloc(&d_output_ids, batch_size * beam_width * max_seq_len, false);
+    deviceMalloc(&d_parent_ids, batch_size * beam_width * max_seq_len, false);
+    deviceMalloc(&d_sequence_lengths, batch_size * beam_width, false);
+
+    std::vector<Tensor> input_tensors = std::vector<Tensor>{
+        Tensor{MEMORY_GPU, getTensorType<T>(),
+               std::vector<size_t>{batch_size * beam_width, memory_max_seq_len, memory_hidden_units},
+               d_memory_tensor},
+        Tensor{MEMORY_GPU, TYPE_INT32, std::vector<size_t>{batch_size * beam_width}, d_memory_sequence_lengths}};
+
+    std::vector<Tensor> output_tensors = std::vector<Tensor>{
+        Tensor{MEMORY_GPU, TYPE_INT32, std::vector<size_t>{(size_t)max_seq_len, batch_size, beam_width}, d_output_ids},
+        Tensor{MEMORY_GPU, TYPE_INT32, std::vector<size_t>{(size_t)max_seq_len, batch_size, beam_width}, d_parent_ids},
+        Tensor{MEMORY_GPU, TYPE_INT32, std::vector<size_t>{batch_size, beam_width}, d_sequence_lengths}};
+    print_mem_usage();
+
+    cudaProfilerStart();
+    const int ite = 10;
+    // warm up
+    for (int i = 0; i < ite; ++i) {
+        decoding.forward(&output_tensors, &input_tensors, &decoding_weights);
+    }
+    cudaDeviceSynchronize();
+
+    struct timeval start, end;
+    cudaDeviceSynchronize();
+    gettimeofday(&start, NULL);
+
+    for (int i = 0; i < ite; ++i) {
+        decoding.forward(&output_tensors, &input_tensors, &decoding_weights);
+    }
+
+    cudaDeviceSynchronize();
+    gettimeofday(&end, NULL);
+
+    cudaProfilerStop();
+
+    printf("[INFO] batch_size %ld beam_width %ld head_num %ld size_per_head %ld max_seq_len %ld"
+           " num_layers %ld vocab_size %ld, top_k %d, top_p %f, QK-CPP-decoding-time %.2f ms\n",
+           batch_size,
+           beam_width,
+           head_num,
+           size_per_head,
+           max_seq_len,
+           num_layers,
+           vocab_size,
+           top_k,
+           top_p,
+           ((end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) * 0.001) / ite);
+
+    delete cublas_algo_map;
+    delete cublas_wrapper_mutex;
+
+    exit(0);
 }

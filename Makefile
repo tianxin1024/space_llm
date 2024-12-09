@@ -31,7 +31,7 @@ debug_test:
 # 	@cd build/bin && ./$(PRO) 
 
 run :
-	@cd build/bin && ./decoding_example 4 1 8 64 2048 30000 6 32 32 512 0 0.6 1
+	@cd build/bin && ./decoding_example 4 1 8 64 2048 30000 6 32 32 512 0 0.6 0
 
 decoding_debug :
 	cd debug/decoding && gdb -x ./decoding.gdb
