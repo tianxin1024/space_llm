@@ -17,7 +17,7 @@
 #include "decoder_masked_multihead_attention_template.hpp"
 #include "kernels/decoder_masked_multihead_attention.h"
 #include "kernels/decoder_masked_multihead_attention_utils.h"
-// #include "utils/cuda_bf16_wrapper.h"
+#include "utils/cuda_bf16_wrapper.h"
 #include <assert.h>
 #include <float.h>
 #include <type_traits>

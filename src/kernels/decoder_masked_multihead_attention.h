@@ -140,5 +140,8 @@ struct outputCrossAttentionParam {
     bool is_return_cross_attentions = false;
 };
 
+void masked_multihead_attention(const Masked_multihead_attention_params<float> &params, const cudaStream_t &stream);
+void masked_multihead_attention(const Masked_multihead_attention_params<uint16_t> &params, const cudaStream_t &stream);
+
 void cross_multihead_attention(const Cross_multihead_attention_params<float> &params, const cudaStream_t &stream);
 void cross_multihead_attention(const Cross_multihead_attention_params<uint16_t> &params, const cudaStream_t &stream);
