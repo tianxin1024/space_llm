@@ -384,6 +384,86 @@ void Decoding<T>::forward(TensorMap *output_tensors,
             Tensor{MEMORY_GPU, data_type, {num_layer_, batch_size * beam_width_, mem_max_seq_len, hidden_units_}, value_mem_cache_}};
 
         decoder_->forward(&decoder_output_tensors, &decoder_input_tensors, &decoding_weights->decoder_layer_weights);
+
+        invokeGeneralLayerNorm(normed_decoder_output_buf_,
+                               decoder_output_buf_,
+                               decoding_weights->post_decoder_layernorm.gamma,
+                               decoding_weights->post_decoder_layernorm.beta,
+                               layernorm_eps_,
+                               batch_size * beam_width_,
+                               hidden_units_,
+                               (float *)nullptr,
+                               0,
+                               stream_);
+        sync_check_cuda_error();
+
+        bool is_bf16 = false;
+
+        if (is_bf16) {
+            float alpha = 1.0f;
+            float beta = 0.0f;
+        } else {
+            cublas_wrapper_->Gemm(CUBLAS_OP_N,
+                                  CUBLAS_OP_N,
+                                  vocab_size_padded_,
+                                  batch_size * beam_width_,
+                                  hidden_units_,
+                                  padded_embedding_kernel_ptr_,
+                                  vocab_size_padded_,
+                                  normed_decoder_output_buf_,
+                                  hidden_units_,
+                                  logits_buf_,
+                                  vocab_size_padded_);
+        }
+
+        const int tmp_ite = 0;
+        const int tmp_local_batch_size = batch_size;
+
+        TensorMap dynamic_decode_input_tensors(
+            {{"logits", Tensor{MEMORY_GPU, data_type, {batch_size, beam_width_, vocab_size_padded_}, logits_buf_}},
+             {"embedding_bias", Tensor{MEMORY_GPU, data_type, {vocab_size_padded_}, is_bf16 ? nullptr : padded_embedding_bias_ptr_}},
+             {"end_id", Tensor{MEMORY_GPU, TYPE_INT32, {batch_size}, end_ids_buf_}},
+             {"step", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &step}},
+             {"max_input_length", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &max_input_length}},
+             {"ite", Tensor{MEMORY_CPU, TYPE_UINT32, {1}, &tmp_ite}},
+             {"src_cache_indirection", Tensor{MEMORY_GPU, TYPE_INT32, {batch_size, beam_width_, max_seq_len_}, cache_indirections_[src_indir_idx]}},
+             {"local_batch_size", Tensor{MEMORY_CPU, TYPE_INT32, {1}, &tmp_local_batch_size}},
+             {"beam_search_diversity_rate", Tensor{MEMORY_CPU, TYPE_FP32, {1}, &beam_search_diversity_rate_}},
+             {"temperature", Tensor{MEMORY_CPU, TYPE_FP32, {1}, &temperature_}},
+             {"len_penalty", Tensor{MEMORY_CPU, TYPE_FP32, {1}, &len_penalty_}},
+             {"repetition_penalty", Tensor{MEMORY_CPU, TYPE_FP32, {1}, &repetition_penalty_}}});
+
+        // common outputs
+        TensorMap dynamic_decode_output_tensors(
+            {{"output_ids", Tensor{MEMORY_GPU, TYPE_INT32, {max_seq_len_, batch_size, beam_width_}, output_ids_buf_}},
+             {"finished", Tensor{MEMORY_GPU, TYPE_BOOL, {batch_size * beam_width_}, finished_buf_}},
+             {"cum_log_probs", Tensor{MEMORY_GPU, TYPE_FP32, {batch_size * beam_width_}, cum_log_probs_}},
+             {"parent_ids", Tensor{MEMORY_GPU, TYPE_INT32, {max_seq_len_, batch_size, beam_width_}, parent_ids_buf_}},
+             {"sequence_length", output_tensors->at("sequence_length")},
+             {"tgt_cache_indirection", Tensor{MEMORY_GPU, TYPE_INT32, {batch_size, beam_width_, max_seq_len_}, cache_indirections_[tgt_indir_idx]}}});
+
+        dynamic_decode_layer_->forward(&dynamic_decode_output_tensors, &dynamic_decode_input_tensors);
+    }
+
+    // minus the sequence length of unfinished sentence by 1 since we start from 1.
+    invokeMinusUnfinishedSeqlen(
+        output_tensors->at("sequence_length").getPtr<int>(), finished_buf_, batch_size * beam_width_, stream_);
+
+    if (beam_width_ > 1) {
+        // pass
+    } else {
+        // For sampling, only copy the results to outptu_tensors
+        cudaD2Dcpy(output_tensors->at("output_ids").getPtr<int>(),
+                   output_ids_buf_ + batch_size * beam_width_,
+                   batch_size * beam_width_ * (max_seq_len_ - 1));
+    }
+
+    // Return the cumulative log probability if requested.
+    if (output_tensors->isExist("cum_log_probs")) {
+        Tensor cum_log_probs = output_tensors->at("cum_log_probs");
+        QK_CHECK_WITH_INFO(cum_log_probs.size() == batch_size * beam_width_,
+                           "The shape of cum_log_probs does not match with batch_size x beam_width.");
+        cudaD2Dcpy(cum_log_probs.getPtr<float>(), cum_log_probs_, batch_size * beam_width_);
     }
 }
 
