@@ -118,4 +118,6 @@ struct gatherTreeParam {
 
 void invokeGatherTree(gatherTreeParam param);
 
+void invokeMinusUnfinishedSeqlen(int *sequence_lengths, const bool *finished, const int token_num, cudaStream_t stream);
+
 } // namespace space_llm

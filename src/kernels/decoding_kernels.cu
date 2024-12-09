@@ -518,4 +518,18 @@ void invokeGatherTree(gatherTreeParam param) {
     gatherTree<<<grid, block, 0, param.stream>>>(param);
 }
 
+__global__ void minusUnfinishedSeqlen(int *sequence_lengths, const bool *finished, const int token_num) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < token_num; i += blockDim.x * gridDim.x) {
+        if (finished[i] == false) {
+            sequence_lengths[i] -= 1;
+        }
+    }
+}
+
+void invokeMinusUnfinishedSeqlen(int *sequence_lengths, const bool *finished, const int token_num, cudaStream_t stream) {
+    dim3 block(std::min(256, token_num));
+    dim3 grid(ceil(token_num / 256.));
+    minusUnfinishedSeqlen<<<block, grid, 0, stream>>>(sequence_lengths, finished, token_num);
+}
+
 } // namespace space_llm
