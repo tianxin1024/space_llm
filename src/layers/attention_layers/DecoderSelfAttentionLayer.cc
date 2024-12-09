@@ -120,7 +120,7 @@ void fusedQKV_masked_attention_dispatch(const T *qkv_buf,
         params.attention_out_scale = attention_out_scale;
     }
 
-    // masked_multihead_attention(params, stream);
+    masked_multihead_attention(params, stream);
 }
 
 #define INSTANTIATE_FUSEDQKV_MASKED_ATTENTION_DISPATCH(T)                                      \

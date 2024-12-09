@@ -314,6 +314,16 @@ __global__ void cross_attention_kernel_opt(T *__restrict query_buf,
 }
 
 template <typename T>
+struct CATypeConverter {
+    using Type = T;
+};
+
+template <>
+struct CATypeConverter<half> {
+    using Type = uint16_t;
+};
+
+template <typename T>
 void cross_attention_dispatch(T *query_buf,
                               const T *Q_bias,
                               T *key_cache,

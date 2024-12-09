@@ -129,6 +129,9 @@ struct Multihead_attention_params<T, true> : public Multihead_attention_params_b
 template <class T>
 using Masked_multihead_attention_params = Multihead_attention_params<T, false>;
 
+template <class T>
+using Cross_multihead_attention_params = Multihead_attention_params<T, true>;
+
 template <typename T>
 struct outputCrossAttentionParam {
     // max decoder output length
@@ -136,3 +139,6 @@ struct outputCrossAttentionParam {
     T *cross_attention_out = nullptr;
     bool is_return_cross_attentions = false;
 };
+
+void cross_multihead_attention(const Cross_multihead_attention_params<float> &params, const cudaStream_t &stream);
+void cross_multihead_attention(const Cross_multihead_attention_params<uint16_t> &params, const cudaStream_t &stream);
