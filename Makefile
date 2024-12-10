@@ -1,6 +1,6 @@
 NUM_JOBS = 8
 CXX      = g++
-PRO      = gpt_demo
+PRO      = llama_example
 
 SPACE   ?= $(PWD)
 LIBDIR  ?= $(SPACE)/lib
@@ -27,11 +27,11 @@ debug_cuda:
 debug_test:
 	@cd debug/test && gdb -x ./sampling_layer.gdb
 
-# run :
-# 	@cd build/bin && ./$(PRO) 
-
 run :
-	@cd build/bin && ./decoding_example 4 1 8 64 2048 30000 6 32 32 512 0 0.6 0
+	@cd build/bin && ./$(PRO) 
+
+# run :
+# 	@cd build/bin && ./decoding_example 4 1 8 64 2048 30000 6 32 32 512 0 0.6 0
 
 decoding_debug :
 	cd debug/decoding && gdb -x ./decoding.gdb
