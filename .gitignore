@@ -7,3 +7,4 @@ debug
 gpt_example.log
 .vscode
 log
+script/__pycache__
