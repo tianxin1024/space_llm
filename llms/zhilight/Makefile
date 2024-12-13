@@ -14,3 +14,11 @@ all :
 
 run :
 	@cd build/tests && ./$(PRO)
+
+debug:
+	@cd debug && gdb -x ./test_gemm.gdb
+
+clean:
+	read -r -p "This will delete the contents of build/*. Are you sure? [CRAL-C to abort]" response && rm -rf build/*
+
+.PHONY: all run debug clean
