@@ -1,7 +1,7 @@
 NUM_JOBS = 8
 CXX      = g++
 
-PRO      = test_print_tensor
+PRO      = test_element
 
 CMAKE_CMD = mkdir -p build && cd build && cmake ..
 
@@ -16,7 +16,7 @@ run :
 	@cd build/tests && ./$(PRO)
 
 debug:
-	@cd debug && gdb -x ./$(PRO).gdb
+	@echo $(shell ./debug/create_gdb $(PRO)) && gdb -x ./debug/$(PRO).gdb
 
 clean:
 	read -r -p "This will delete the contents of build/*. Are you sure? [CRAL-C to abort]" response && rm -rf build/*

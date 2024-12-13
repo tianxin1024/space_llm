@@ -20,6 +20,9 @@ set(CMAKE_CUDA_VISIBILITY_PRESET default)
 add_executable(test_template test_template.cpp)
 target_link_libraries(test_template LINK_PUBLIC bmengine)
 
+add_executable(test_element test_element.cpp)
+target_link_libraries(test_element LINK_PUBLIC bmengine)
+
 add_executable(test_gemm test_gemm.cpp)
 target_link_libraries(test_gemm LINK_PUBLIC bmengine)
 
