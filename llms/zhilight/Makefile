@@ -1,7 +1,7 @@
 NUM_JOBS = 8
 CXX      = g++
 
-PRO      = test_element
+PRO      = test_index_select
 
 CMAKE_CMD = mkdir -p build && cd build && cmake ..
 

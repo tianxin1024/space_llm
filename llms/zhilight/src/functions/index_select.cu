@@ -1,4 +1,4 @@
-// #include "functions/index_select.h"
+#include "functions/index_select.h"
 #include "private/tensor_ops.h"
 #include <assert.h>
 
@@ -29,29 +29,29 @@ static __global__ void BM_KERNEL(index_select)(
     }
 }
 
-// core::Tensor index_select(
-//     const core::Context &ctx,
-//     const core::Tensor &input,
-//     int dim,
-//     const core::Tensor &index // the 1-D tensor containing the indices to index
-// ) {
-//     auto shape = input.shape();
-//     int rank = int(shape.size());
-//     if (dim < 0)
-//         dim += rank;
-//     BM_ASSERT(dim >= 0 && dim < rank, "Dimension out of range");
+core::Tensor index_select(
+    const core::Context &ctx,
+    const core::Tensor &input,
+    int dim,
+    const core::Tensor &index // the 1-D tensor containing the indices to index
+) {
+    auto shape = input.shape();
+    int rank = int(shape.size());
+    if (dim < 0)
+        dim += rank;
+    BM_ASSERT(dim >= 0 && dim < rank, "Dimension out of range");
 
-//     const DimT M_new = index.numel();
+    const DimT M_new = index.numel();
 
-//     std::vector<size_t> out_shape = shape;
-//     out_shape[dim] = M_new;
-//     core::Tensor out = ctx.tensor(out_shape, input.dtype());
+    std::vector<size_t> out_shape = shape;
+    out_shape[dim] = M_new;
+    core::Tensor out = ctx.tensor(out_shape, input.dtype());
 
-//     auto stream = ctx.current_stream()->ptr;
+    auto stream = ctx.current_stream()->ptr;
 
-//     index_select(stream, input, dim, index, out);
-//     return out;
-// }
+    index_select(stream, input, dim, index, out);
+    return out;
+}
 
 void index_select(
     cudaStream_t stream,
@@ -121,28 +121,28 @@ static __global__ void BM_KERNEL(index_along_dim)(
     }
 }
 
-// core::Tensor index_along_dim(
-//     const core::Context &ctx,
-//     const core::Tensor &input,
-//     int dim,
-//     const core::Tensor &index // the (dim + 1)-D tensor containing the indices to index
-// ) {
-//     BM_ASSERT(index.ndim() == dim + 1, "index must be `dim + 1` dimentional tensor");
-//     auto shape = input.shape();
-//     int rank = int(shape.size());
-//     if (dim < 0)
-//         dim += rank;
-//     BM_ASSERT(dim >= 0 && dim < rank, "Dimension out of range");
+core::Tensor index_along_dim(
+    const core::Context &ctx,
+    const core::Tensor &input,
+    int dim,
+    const core::Tensor &index // the (dim + 1)-D tensor containing the indices to index
+) {
+    BM_ASSERT(index.ndim() == dim + 1, "index must be `dim + 1` dimentional tensor");
+    auto shape = input.shape();
+    int rank = int(shape.size());
+    if (dim < 0)
+        dim += rank;
+    BM_ASSERT(dim >= 0 && dim < rank, "Dimension out of range");
 
-//     std::vector<size_t> out_shape = shape;
-//     out_shape[dim] = index.size(dim);
-//     core::Tensor out = ctx.tensor(out_shape, input.dtype());
+    std::vector<size_t> out_shape = shape;
+    out_shape[dim] = index.size(dim);
+    core::Tensor out = ctx.tensor(out_shape, input.dtype());
 
-//     auto stream = ctx.current_stream()->ptr;
+    auto stream = ctx.current_stream()->ptr;
 
-//     index_along_dim(stream, input, dim, index, out);
-//     return out;
-// }
+    index_along_dim(stream, input, dim, index, out);
+    return out;
+}
 
 void index_along_dim(
     cudaStream_t stream,
@@ -235,17 +235,17 @@ void copy_last_dim(
     BM_CUDART_ASSERT(cudaGetLastError());
 }
 
-// core::Tensor slice_last_dim(
-//     const core::Context &ctx,
-//     const core::Tensor &input,
-//     int from,
-//     int len) {
-//     auto shape = input.shape();
-//     shape[shape.size() - 1] = len;
-//     auto output = ctx.tensor(shape, input.dtype());
-//     copy_last_dim(ctx.current_stream()->ptr, input, output, from, from + len);
-//     return output;
-// }
+core::Tensor slice_last_dim(
+    const core::Context &ctx,
+    const core::Tensor &input,
+    int from,
+    int len) {
+    auto shape = input.shape();
+    shape[shape.size() - 1] = len;
+    auto output = ctx.tensor(shape, input.dtype());
+    copy_last_dim(ctx.current_stream()->ptr, input, output, from, from + len);
+    return output;
+}
 
 }
 } // namespace bmengine::functions
