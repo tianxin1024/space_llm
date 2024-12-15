@@ -31,3 +31,6 @@ target_link_libraries(test_gemm LINK_PUBLIC bmengine)
 
 add_executable(test_print_tensor test_print_tensor.cpp)
 target_link_libraries(test_print_tensor LINK_PUBLIC bmengine)
+
+add_executable(test_softmax test_softmax.cpp)
+target_link_libraries(test_softmax LINK_PUBLIC bmengine)
