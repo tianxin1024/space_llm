@@ -14,6 +14,7 @@ static __global__ void BM_KERNEL(softmax)(
     float temperature) {
     int offset = blockIdx.x * n;
     float local_max = -1e20;
+    printf("-");
     for (int i = threadIdx.x; i < n; i += blockDim.x) {
         local_max = fmaxf(local_max, logits[i + offset]);
     }
@@ -75,7 +76,7 @@ void softmax(
     int n = logits.size(ndims - 1);
 
     dim3 gridDim(batch, 1, 1);
-    dim3 blockDim(min(1024, round_up(n, 32)), 1, 1);
+    dim3 blockDim(std::min(1024, round_up(n, 32)), 1, 1);
     auto stream = ctx.current_stream()->ptr;
 
     BM_DTYPE_DISPATCH_FLOAT(logits.dtype(), {

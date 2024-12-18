@@ -18,6 +18,9 @@ run :
 debug:
 	@echo $(shell ./debug/create_gdb $(PRO)) && gdb -x ./debug/$(PRO).gdb
 
+bug :
+	@gdb -x ./debug/debug_softmax.gdb
+
 clean:
 	read -r -p "This will delete the contents of build/*. Are you sure? [CRAL-C to abort]" response && rm -rf build/*
 

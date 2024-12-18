@@ -1,5 +1,6 @@
 #include <vector>
 #include <random>
+#include <algorithm>
 
 #include "kernels/gpt_kernels.h"
 #include "utils/memory_utils.h"
