@@ -8,3 +8,4 @@ gpt_example.log
 .vscode
 log
 script/__pycache__
+llms/zhilight/.cache/clangd/index

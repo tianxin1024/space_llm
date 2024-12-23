@@ -23,6 +23,13 @@ file(GLOB_RECURSE FILES_BMENGINE "*.cpp")
 file(GLOB_RECURSE FILES_BMENGINE_CUDA "*.cu")
 file(GLOB_RECURSE FILES_BMENGINE_HEADER "*.h")
 
+execute_process(
+    COMMAND ${PYTHON_EXECUTABLE} -c "import pybind11; \
+        print(pybind11.get_cmake_dir())"
+    OUTPUT_VARIABLE pybind11_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+find_package(pybind11 REQUIRED)
+
 add_library(bmengine STATIC
     ${FILES_BMENGINE}
     ${FILES_BMENGINE_CUDA}

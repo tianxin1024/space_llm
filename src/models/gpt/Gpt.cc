@@ -5,6 +5,7 @@
 namespace space_llm {
 
 template <typename T>
+
 void Gpt<T>::initialize() {
     gpt_context_decoder_ = new GptContextDecoder<T>(0,
                                                     0,

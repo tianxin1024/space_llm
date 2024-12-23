@@ -5,8 +5,14 @@ enable_language(C)
 enable_language(CXX)
 enable_language(CUDA)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+option(WITH_TESTING "Compile with unit testing" ON)
 
 add_subdirectory(src)
 add_subdirectory(tests)
+
+if (WITH_TESTING)
+    add_subdirectory(src/nn/tests)
+endif()
