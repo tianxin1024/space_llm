@@ -2,6 +2,7 @@
 #include "nn/attention/quant_attention.cuh"
 
 #include "functions/utils.cuh"
+#include "logger/std_log_op.hpp"
 #include "utils/env.h"
 
 #include <iostream>
@@ -15,13 +16,12 @@ namespace nn {
 using bmengine::core::DataType;
 using bmengine::core::Tensor;
 
-
 #define WARP_SIZE 32
-template<typename T, typename T2 = T, int DIM_HEAD = 128>
+template <typename T, typename T2 = T, int DIM_HEAD = 128>
 static __inline__ __device__ void multiply_q_k_block(
-    const T* __restrict__ g_q, // (dim_head)
-    const T* __restrict__ g_k, // (len_buf, dim_head)
-    T2* __restrict__ logit,    // (len_buf)
+    const T *__restrict__ g_q, // (dim_head)
+    const T *__restrict__ g_k, // (len_buf, dim_head)
+    T2 *__restrict__ logit,    // (len_buf)
     int len_buf,
     int stride_k = DIM_HEAD) {
     const int warpId = threadIdx.x / WARP_SIZE;
@@ -29,24 +29,24 @@ static __inline__ __device__ void multiply_q_k_block(
     const int warpNum = blockDim.x / WARP_SIZE;
     assert(DIM_HEAD == WARP_SIZE * 4);
 
-    short4 a4 = *reinterpret_cast<const short4*>(g_q + laneId * 4);
+    short4 a4 = *reinterpret_cast<const short4 *>(g_q + laneId * 4);
     for (int col = warpId; col < len_buf; col += warpNum) {
         float res = 0;
-        short4 b4 = *reinterpret_cast<const short4*>(g_k + col * stride_k + laneId * 4);
-        res += float(*reinterpret_cast<T*>(&a4.x)) * float(*reinterpret_cast<T*>(&b4.x));
-        res += float(*reinterpret_cast<T*>(&a4.y)) * float(*reinterpret_cast<T*>(&b4.y));
-        res += float(*reinterpret_cast<T*>(&a4.z)) * float(*reinterpret_cast<T*>(&b4.z));
-        res += float(*reinterpret_cast<T*>(&a4.w)) * float(*reinterpret_cast<T*>(&b4.w));
+        short4 b4 = *reinterpret_cast<const short4 *>(g_k + col * stride_k + laneId * 4);
+        res += float(*reinterpret_cast<T *>(&a4.x)) * float(*reinterpret_cast<T *>(&b4.x));
+        res += float(*reinterpret_cast<T *>(&a4.y)) * float(*reinterpret_cast<T *>(&b4.y));
+        res += float(*reinterpret_cast<T *>(&a4.z)) * float(*reinterpret_cast<T *>(&b4.z));
+        res += float(*reinterpret_cast<T *>(&a4.w)) * float(*reinterpret_cast<T *>(&b4.w));
         res = functions::warpReduceSum<float>(res);
         if (laneId == 0)
             logit[col] = T2(res);
     }
 }
-template<typename T, typename T2 = T, int DIM_HEAD = 64, int HEAD1 = 8, typename T_LOAD = double2>
+template <typename T, typename T2 = T, int DIM_HEAD = 64, int HEAD1 = 8, typename T_LOAD = double2>
 static __inline__ __device__ void multiply_q_k_block1(
-    const T* __restrict__ s_q, // (dim_head)
-    const T* __restrict__ g_k, // (len_buf, dim_head)
-    T2* __restrict__ logit,    // (len_buf)
+    const T *__restrict__ s_q, // (dim_head)
+    const T *__restrict__ g_k, // (len_buf, dim_head)
+    T2 *__restrict__ logit,    // (len_buf)
     int len_buf,
     int stride_k = DIM_HEAD) {
     static_assert(DIM_HEAD % 16 == 0);
@@ -55,11 +55,11 @@ static __inline__ __device__ void multiply_q_k_block1(
     __align__(16) T k_chunk[HEAD1];
     for (int col = threadIdx.x; col < len_buf; col += blockDim.x) {
         float res = 0;
-        const T* key = g_k + col * stride_k;
+        const T *key = g_k + col * stride_k;
         for (int d1 = 0; d1 < DIM_HEAD; d1 += HEAD1) {
             // *reinterpret_cast<T_LOAD*>(&q_chunk[0]) = *reinterpret_cast<const T_LOAD*>(s_q + d1);
-            *reinterpret_cast<T_LOAD*>(&k_chunk[0]) = *reinterpret_cast<const T_LOAD*>(key + d1);
-            const T* query = s_q + d1;
+            *reinterpret_cast<T_LOAD *>(&k_chunk[0]) = *reinterpret_cast<const T_LOAD *>(key + d1);
+            const T *query = s_q + d1;
 #pragma unroll
             for (int d = 0; d < HEAD1; d++) {
                 res += float(query[d]) * float(k_chunk[d]);
@@ -70,12 +70,11 @@ static __inline__ __device__ void multiply_q_k_block1(
     }
 }
 
-
-template<typename T, int DIM_HEAD = 128, typename T2 = T>
+template <typename T, int DIM_HEAD = 128, typename T2 = T>
 static __device__ void multiply_score_v_block(
-    const float* score,        // (len_buf)
-    const T* __restrict__ g_v, // (len_buf, dim_head)
-    T* __restrict__ output,    // (dim_head)
+    const float *score,        // (len_buf)
+    const T *__restrict__ g_v, // (len_buf, dim_head)
+    T *__restrict__ output,    // (dim_head)
     int len_buf,
     int stride_v = DIM_HEAD) {
     assert(DIM_HEAD == WARP_SIZE * 4);
@@ -90,11 +89,11 @@ static __device__ void multiply_score_v_block(
     }
     output[x] = T(res);
 }
-template<typename T, int DIM_HEAD = 128, typename T2 = T, int NUM_SPLIT = 1024 / DIM_HEAD>
+template <typename T, int DIM_HEAD = 128, typename T2 = T, int NUM_SPLIT = 1024 / DIM_HEAD>
 static __device__ void multiply_score_v_block2(
-    const float* score,        // (len_buf)
-    const T* __restrict__ g_v, // (len_buf, DIM_HEAD)
-    T2* __restrict__ output,   // (DIM_HEAD)
+    const float *score,        // (len_buf)
+    const T *__restrict__ g_v, // (len_buf, DIM_HEAD)
+    T2 *__restrict__ output,   // (DIM_HEAD)
     int len_buf,
     int stride_v = DIM_HEAD) {
     static_assert((DIM_HEAD % WARP_SIZE) == 0);
@@ -128,10 +127,9 @@ static __device__ void multiply_score_v_block2(
     }
 }
 
-
 // use outer shared memory
-template<typename T>
-__inline__ __device__ T blockReduceMax(T x, T* shared) {
+template <typename T>
+__inline__ __device__ T blockReduceMax(T x, T *shared) {
     int lane = threadIdx.x % 32;
     int wid = threadIdx.x / 32;
     x = functions::warpReduceMax<T>(x);
@@ -150,8 +148,8 @@ __inline__ __device__ T blockReduceMax(T x, T* shared) {
 }
 
 // use outer shared memory
-template<typename T>
-__inline__ __device__ T blockReduceSum(T x, T* shared) {
+template <typename T>
+__inline__ __device__ T blockReduceSum(T x, T *shared) {
     int lane = threadIdx.x % 32;
     int wid = threadIdx.x / 32;
     x = functions::warpReduceSum<T>(x);
@@ -169,18 +167,18 @@ __inline__ __device__ T blockReduceSum(T x, T* shared) {
     return shared[32]; // avoid RAW hazard
 }
 
-template<typename T>
+template <typename T>
 static inline __device__ void softmax_mask_block(
-    float* reduce_buffer,
-    float* smem,                         // (len_buf)
-    const int8_t* __restrict__ mask,     // (len_buf)
-    const T* __restrict__ position_bias, // (len_buf)
+    float *reduce_buffer,
+    float *smem,                         // (len_buf)
+    const int8_t *__restrict__ mask,     // (len_buf)
+    const T *__restrict__ position_bias, // (len_buf)
     float scale,
     int len_buf,
-    T* data = nullptr,
+    T *data = nullptr,
     int len_sys = 0,
-    float* local_max_out = nullptr,
-    float* local_sum_out = nullptr) {
+    float *local_max_out = nullptr,
+    float *local_sum_out = nullptr) {
     if (data) {
         for (int i = threadIdx.x; i < len_buf; i += blockDim.x) {
             smem[i] = __ldg(mask + i) ? float(data[i]) * scale : -functions::Inf<float>();
@@ -191,8 +189,7 @@ static inline __device__ void softmax_mask_block(
         }
     } else {
         for (int i = threadIdx.x; i < len_buf; i += blockDim.x) {
-            smem[i] = __ldg(mask + i) ? smem[i] * scale + float(position_bias[i])
-                                      : -functions::Inf<float>();
+            smem[i] = __ldg(mask + i) ? smem[i] * scale + float(position_bias[i]) : -functions::Inf<float>();
         }
     }
     float local_max = -1e20;
@@ -226,16 +223,88 @@ static inline __device__ void softmax_mask_block(
     }
 }
 
+template <typename T>
+__device__ T *get_align32_shared_memory() {
+    extern __shared__ double4 _mem[];
+    float *align_mem = reinterpret_cast<float *>(_mem);
+    while (reinterpret_cast<uintptr_t>(align_mem) % 32 != 0)
+        align_mem++; // align to 32
+    return reinterpret_cast<T *>(align_mem);
+}
+
+// gridDim (batch, num_heads, len_q),  blockDim (dim_head)
+template <typename T, int DIM_HEAD = 128, int O_DIM_HEAD = DIM_HEAD>
+static __global__ void KERNEL_attn_qpk_rag_buffer(
+    const T *__restrict__ g_q,            // (batch, len_q, num_heads, dim_head）
+    const int *__restrict__ buf_lens,     // (batch)
+    T **__restrict__ key_buf_addrs,       // (batch) => (num_heads, len_buf, dim_head)
+    T **__restrict__ val_buf_addrs,       // (batch) => (num_heads, len_buf, dim_head)
+    const int8_t *__restrict__ mask,      // (batch) => (len_q, len_buf)
+    T **__restrict__ position_bias_addrs, // (batch) => (num_heads, len_q, len_buf)
+    T *__restrict__ output,               // (batch, len_q, num_heads, O_DIM_HEAD)
+    float scale,
+    bool BSHD) {
+    const int len_buf = buf_lens[blockIdx.x];
+    const unsigned int head = blockIdx.y;
+    const unsigned int num_heads = gridDim.y;
+    const unsigned int len_q = gridDim.z;
+
+    g_q += ((blockIdx.x * gridDim.z + blockIdx.z) * gridDim.y + blockIdx.y) * DIM_HEAD;
+    output += ((blockIdx.x * gridDim.z + blockIdx.z) * gridDim.y + blockIdx.y) * O_DIM_HEAD;
+    T *g_k = key_buf_addrs[blockIdx.x]; // (num_heads, len_buf, dim_head)
+    T *g_v = val_buf_addrs[blockIdx.x]; // (num_heads, len_buf, dim_head)
+    int stride_kv = BSHD ? num_heads * DIM_HEAD : DIM_HEAD;
+    if (BSHD) {
+        g_k += head * DIM_HEAD; // (len_buf, num_heads, dim_head)
+        g_v += head * DIM_HEAD;
+    } else {
+        g_k += head * len_buf * DIM_HEAD;
+        g_v += head * len_buf * DIM_HEAD;
+    }
+
+    int len_offset = 0;
+    for (int i = 0; i < blockIdx.x; ++i) {
+        len_offset += buf_lens[i];
+    }
+
+    // Not optimize for len_q > 1. i.e. call len_q times
+    T *s_q = get_align32_shared_memory<T>();
+    float *smem = reinterpret_cast<float *>(s_q + DIM_HEAD);
+    if (DIM_HEAD != 128) {
+        if (threadIdx.x < DIM_HEAD)
+            s_q[threadIdx.x] = g_q[threadIdx.x];
+        __syncthreads();
+        multiply_q_k_block1<T, float, DIM_HEAD>(&s_q[0], g_k, smem, len_buf, stride_kv);
+        // multiply_q_k_block_d64<T, float>(g_q, g_k, smem, len_buf, stride_kv);
+    } else {
+        multiply_q_k_block<T, float, DIM_HEAD>(g_q, g_k, smem, len_buf, stride_kv);
+    }
+
+    mask += len_q * len_offset + blockIdx.z * len_buf;
+    // position_bias += num_heads * len_q * len_offset;  // (num_heads, len_q, len_buf)
+    T *position_bias = nullptr;
+    if (position_bias_addrs) {
+        position_bias = position_bias_addrs[blockIdx.x];
+        position_bias += (head * gridDim.z + blockIdx.z) * len_buf;
+    }
+
+    __syncthreads();
+    static __shared__ float reduce_buffer[33];
+    softmax_mask_block(reduce_buffer, smem, mask, position_bias, scale, len_buf);
+    __syncthreads();
+
+    multiply_score_v_block2<T, O_DIM_HEAD>(smem, g_v, output, len_buf, stride_kv);
+}
 
 // gridDim (len_q, num_kv_heads * m_query, batch),  blockDim (dim_head)
-template<typename T, int DIM_HEAD = 128, int O_DIM_HEAD = DIM_HEAD>
+template <typename T, int DIM_HEAD = 128, int O_DIM_HEAD = DIM_HEAD>
 static __global__ void KERNEL_mqa_rag_buffer1(
-    const T* __restrict__ g_q,        // (batch, len_q, num_kv_heads * m_query, dim_head）
-    const int* __restrict__ buf_lens, // (batch)
-    T** __restrict__ key_buf_addrs,   // (batch) => (num_kv_heads, len_buf, dim_head)
-    T** __restrict__ val_buf_addrs,   // (batch) => (num_kv_heads, len_buf, dim_head)
-    const int8_t* __restrict__ mask,  // (batch) => (len_q, len_buf)
-    T* __restrict__ output,           // (batch, len_q, num_kv_heads, m_query, dim_head)
+    const T *__restrict__ g_q,        // (batch, len_q, num_kv_heads * m_query, dim_head）
+    const int *__restrict__ buf_lens, // (batch)
+    T **__restrict__ key_buf_addrs,   // (batch) => (num_kv_heads, len_buf, dim_head)
+    T **__restrict__ val_buf_addrs,   // (batch) => (num_kv_heads, len_buf, dim_head)
+    const int8_t *__restrict__ mask,  // (batch) => (len_q, len_buf)
+    T *__restrict__ output,           // (batch, len_q, num_kv_heads, m_query, dim_head)
     float scale,
     int m_query,
     bool BSHD) {
@@ -248,16 +317,16 @@ static __global__ void KERNEL_mqa_rag_buffer1(
     const unsigned int len_q = gridDim.x;
     const unsigned int len_buf = buf_lens[b];
 
-    g_q += ((b * len_q + q) * num_heads + head) * DIM_HEAD;    // => (dim_head)
+    g_q += ((b * len_q + q) * num_heads + head) * DIM_HEAD;      // => (dim_head)
     output += ((b * len_q + q) * num_heads + head) * O_DIM_HEAD; // => (dim_head)
 
     int stride_kv = BSHD ? num_heads / m_query * DIM_HEAD : DIM_HEAD;
     int offset_kv = BSHD ? head_kv * DIM_HEAD : head_kv * len_buf * DIM_HEAD;
-    T* key_buf = key_buf_addrs[b] + offset_kv; // (num_kv_heads, len_buf, dim_head) or
-    T* val_buf = val_buf_addrs[b] + offset_kv; // BSHD: (len_buf, num_kv_heads, dim_head)
+    T *key_buf = key_buf_addrs[b] + offset_kv; // (num_kv_heads, len_buf, dim_head) or
+    T *val_buf = val_buf_addrs[b] + offset_kv; // BSHD: (len_buf, num_kv_heads, dim_head)
 
     functions::SharedMemory<float> shared;
-    float* smem = shared.getPointer();
+    float *smem = shared.getPointer();
 
     // Q * K (dim_head) * (len_buf, dim_head) => (len_buf);
     if (DIM_HEAD != 128) {
@@ -283,17 +352,17 @@ static __global__ void KERNEL_mqa_rag_buffer1(
 #define MIN_LEN_SPLIT 128
 
 // gridDim (len_q * split, num_kv_heads * m_query, batch),  blockDim (dim_head)
-template<typename T, int DIM_HEAD = 128, int O_DIM_HEAD = DIM_HEAD>
+template <typename T, int DIM_HEAD = 128, int O_DIM_HEAD = DIM_HEAD>
 static __global__ void KERNEL_mqa_rag_buffer_split_kv(
-    const T* __restrict__ g_q,         // (batch, len_q, num_kv_heads * m_query, dim_head）
-    const int* __restrict__ buf_lens,  // (batch)
-    T** __restrict__ key_buf_addrs,    // (batch) => (num_kv_heads, len_buf, dim_head)
-    T** __restrict__ val_buf_addrs,    // (batch) => (num_kv_heads, len_buf, dim_head)
-    const int8_t* __restrict__ mask,   // (batch) => (len_q, len_buf)
-    T* __restrict__ output,            // (batch, len_q, num_kv_heads, m_query, dim_head)
-    float* __restrict__ cache,         // (batch, len_q, num_kv_heads, m_query, num_split, dim_head)
-    float* __restrict__ local_max,     // (batch, len_q, num_kv_heads, m_query, num_split)
-    float* __restrict__ local_sum_exp, // (batch, len_q, num_kv_heads, m_query, num_split)
+    const T *__restrict__ g_q,         // (batch, len_q, num_kv_heads * m_query, dim_head）
+    const int *__restrict__ buf_lens,  // (batch)
+    T **__restrict__ key_buf_addrs,    // (batch) => (num_kv_heads, len_buf, dim_head)
+    T **__restrict__ val_buf_addrs,    // (batch) => (num_kv_heads, len_buf, dim_head)
+    const int8_t *__restrict__ mask,   // (batch) => (len_q, len_buf)
+    T *__restrict__ output,            // (batch, len_q, num_kv_heads, m_query, dim_head)
+    float *__restrict__ cache,         // (batch, len_q, num_kv_heads, m_query, num_split, dim_head)
+    float *__restrict__ local_max,     // (batch, len_q, num_kv_heads, m_query, num_split)
+    float *__restrict__ local_sum_exp, // (batch, len_q, num_kv_heads, m_query, num_split)
     float scale,
     int m_query,
     int num_split,
@@ -315,17 +384,17 @@ static __global__ void KERNEL_mqa_rag_buffer_split_kv(
         len_buf <= NO_SPLIT ? len_buf : min(len_split, len_buf - split * len_split);
 
     const int virtual_head = (b * len_q + q) * num_heads + head;
-    g_q += virtual_head * DIM_HEAD;    // => (dim_head)
+    g_q += virtual_head * DIM_HEAD;      // => (dim_head)
     output += virtual_head * O_DIM_HEAD; // => (dim_head)
 
     int stride_kv = BSHD ? num_heads / m_query * DIM_HEAD : DIM_HEAD;
     int offset_kv = BSHD ? head_kv * DIM_HEAD : head_kv * len_buf * DIM_HEAD;
     offset_kv += split * len_split * stride_kv;
-    T* key_buf = key_buf_addrs[b] + offset_kv; // (num_kv_heads, len_buf, dim_head) or
-    T* val_buf = val_buf_addrs[b] + offset_kv; // BSHD: (len_buf, num_kv_heads, dim_head)
+    T *key_buf = key_buf_addrs[b] + offset_kv; // (num_kv_heads, len_buf, dim_head) or
+    T *val_buf = val_buf_addrs[b] + offset_kv; // BSHD: (len_buf, num_kv_heads, dim_head)
 
     functions::SharedMemory<float> shared;
-    float* smem = shared.getPointer();
+    float *smem = shared.getPointer();
 
     // Q * K (dim_head) * (len_buf, dim_head) => (len_buf);
     if (DIM_HEAD != 128) {
@@ -434,13 +503,13 @@ static __global__ void KERNEL_mqa_rag_buffer_split_kv_quant(
 }
 
 // gridDim (num_virtual_heads / batch, batch),  blockDim (dim_head)
-template<typename T>
+template <typename T>
 static __global__ void KERNEL_mqa_combine(
-    const int* __restrict__ buf_lens, // (batch)
-    T* __restrict__ output,           // (batch, len_q, num_kv_heads, m_query, dim_head)
-    float* __restrict__ cache,        // (batch, len_q, num_kv_heads, m_query, num_split, dim_head)
-    float* __restrict__ g_local_max,  // (batch, len_q, num_kv_heads, m_query, num_split)
-    float* __restrict__ g_local_sum_exp, // (batch, len_q, num_kv_heads, m_query, num_split)
+    const int *__restrict__ buf_lens,    // (batch)
+    T *__restrict__ output,              // (batch, len_q, num_kv_heads, m_query, dim_head)
+    float *__restrict__ cache,           // (batch, len_q, num_kv_heads, m_query, num_split, dim_head)
+    float *__restrict__ g_local_max,     // (batch, len_q, num_kv_heads, m_query, num_split)
+    float *__restrict__ g_local_sum_exp, // (batch, len_q, num_kv_heads, m_query, num_split)
     int num_split) {
     const int DIM_HEAD = blockDim.x;
     if (buf_lens[blockIdx.y] <= NO_SPLIT)
@@ -479,16 +548,17 @@ static __global__ void KERNEL_mqa_combine(
 }
 
 // gridDim (len_q, num_kv_heads, batch),  blockDim (dim_head)
-template<typename T, int DIM_HEAD = 128, int O_DIM_HEAD = DIM_HEAD, int M_QUERY = 8>
+template <typename T, int DIM_HEAD = 128, int O_DIM_HEAD = DIM_HEAD, int M_QUERY = 8>
 static __global__ void KERNEL_mqa_rag_buffer(
-    const T* __restrict__ g_q,        // (batch, len_q, num_kv_heads * m_query, dim_head）
-    const int* __restrict__ buf_lens, // (batch)
-    T** __restrict__ key_buf_addrs,   // (batch) => (num_kv_heads, len_buf, dim_head)
-    T** __restrict__ val_buf_addrs,   // (batch) => (num_kv_heads, len_buf, dim_head)
-    const int8_t* __restrict__ mask,  // (batch) => (len_q, len_buf)
-    T* __restrict__ output,           // (batch, len_q, num_kv_heads * m_query, dim_head)
+    const T *__restrict__ g_q,        // (batch, len_q, num_kv_heads * m_query, dim_head）
+    const int *__restrict__ buf_lens, // (batch)
+    T **__restrict__ key_buf_addrs,   // (batch) => (num_kv_heads, len_buf, dim_head)
+    T **__restrict__ val_buf_addrs,   // (batch) => (num_kv_heads, len_buf, dim_head)
+    const int8_t *__restrict__ mask,  // (batch) => (len_q, len_buf)
+    T *__restrict__ output,           // (batch, len_q, num_kv_heads * m_query, dim_head)
     float scale) {
 #if (__CUDA_ARCH__ >= 800) || !defined(__linux__)
+    /*
     const unsigned int b = blockIdx.z;
     const unsigned int head = blockIdx.y;
     const unsigned int num_kv_heads = gridDim.y;
@@ -569,9 +639,73 @@ static __global__ void KERNEL_mqa_rag_buffer(
 //            multiply_score_v_block_wmma2<T, 32, 8>(score_t, g_v, output, len_buf, float_out);
 //        }
     }
+    */
 #endif
 }
 
+void attention_qkv_rag_buffer(
+    const core::Context &ctx,
+    const core::Tensor &batch_q,       // (batch, len_q, num_heads, dim_head）
+    const core::Tensor &buf_lens,      // (batch)
+    const core::Tensor &key_buf_addrs, // (batch) => (num_heads, len_buf, dim_head)
+    const core::Tensor &val_buf_addrs, // (batch) => (num_heads, len_buf, dim_head)
+    const core::Tensor &mask,          // (batch) => (len_q, len_buf)
+    const core::Tensor &position_bias, // (batch) => (num_heads, len_q, len_buf)
+    float scale,
+    int max_len_buf,
+    core::Tensor &output // (batch, len_q, num_heads, dim_head
+) {
+    BM_ASSERT_EQ(batch_q.ndim(), 4, "batch_q is not 4d");
+    BM_ASSERT_EQ(batch_q.size(0), buf_lens.size(0), "batch mismatch");
+    BM_ASSERT_EQ(batch_q.size(0), key_buf_addrs.numel(), "batch mismatch");
+    BM_ASSERT_EQ(batch_q.size(0), val_buf_addrs.numel(), "batch mismatch");
+    if (position_bias.numel()) {
+        BM_ASSERT_EQ(batch_q.size(0), position_bias.numel(), "batch mismatch");
+    }
+    size_t dim_head = batch_q.size(-1);
+    BM_ASSERT(dim_head == 128 || dim_head == 64 || dim_head == 192, "dim_head mismatch");
+    if (dim_head == 192) {
+        // MLA: v_dim_head = 128
+        BM_ASSERT_EQ(128UL, output.size(-1), "v_dim_head mismatch");
+        BM_ASSERT_EQ(batch_q.numel() / dim_head, output.numel() / 128UL, "shape mismatch");
+    } else {
+        BM_ASSERT_EQ(batch_q.shape(), output.shape(), "shape mismatch");
+    }
+
+    BM_ASSERT(
+        batch_q.dtype() == DataType::kHalf || batch_q.dtype() == DataType::kBFloat16, "not half");
+
+    dim3 gridDim(batch_q.size(0), batch_q.size(2), batch_q.size(1));
+    auto stream = ctx.current_stream()->ptr;
+
+    size_t dynamic_size = max_len_buf * sizeof(float) + 1024 + dim_head * sizeof(half);
+
+    auto attr = cudaFuncAttributeMaxDynamicSharedMemorySize;
+    BM_DTYPE_DISPATCH_HALF(batch_q.dtype(), {
+        auto kernel = KERNEL_attn_qpk_rag_buffer<scalar_t, 128>;
+        if (dim_head == 64) {
+            kernel = KERNEL_attn_qpk_rag_buffer<scalar_t, 64>;
+        } else if (dim_head == 128) {
+            kernel = KERNEL_attn_qpk_rag_buffer<scalar_t, 128>;
+        } else if (dim_head == 192) {
+            // MLA: v_dim_head = 128
+            kernel = KERNEL_attn_qpk_rag_buffer<scalar_t, 192, 128>;
+        }
+
+        BM_CUDART_ASSERT(cudaFuncSetAttribute(kernel, attr, dynamic_size));
+        kernel<<<gridDim, 1024, dynamic_size, stream>>>(
+            batch_q.data<scalar_t>(),
+            buf_lens.data<int>(),
+            key_buf_addrs.data<scalar_t *>(),
+            val_buf_addrs.data<scalar_t *>(),
+            mask.data<int8_t>(),
+            position_bias.numel() ? position_bias.data<scalar_t *>() : nullptr,
+            output.mutable_data<scalar_t>(),
+            scale,
+            ctx.is_BSHD());
+    });
+    BM_CUDART_ASSERT(cudaGetLastError());
+}
 
 static int get_max_num_split(
     const core::Context &ctx,

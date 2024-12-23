@@ -5,6 +5,19 @@
 namespace nn {
 using namespace bmengine;
 
+void attention_qkv_rag_buffer(
+    const core::Context &ctx,
+    const core::Tensor &batch_q,       // (batch, len_q, num_heads, dim_head）
+    const core::Tensor &buf_lens,      // (batch)
+    const core::Tensor &key_buf_addrs, // (batch) => (num_heads, len_buf, dim_head)
+    const core::Tensor &val_buf_addrs, // (batch) => (num_heads, len_buf, dim_head)
+    const core::Tensor &mask,          // (batch) => (len_q, len_buf)
+    const core::Tensor &position_bias, // (batch) => (num_heads, len_q, len_buf)
+    float scale,
+    int max_len_buf,
+    core::Tensor &output // (batch, len_q, num_heads, dim_head
+);
+
 struct AttentionWorkspace {
     core::Tensor cache;
     core::Tensor local_max;

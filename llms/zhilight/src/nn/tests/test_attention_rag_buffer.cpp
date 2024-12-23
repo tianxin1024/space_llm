@@ -3,6 +3,7 @@
 #include "functions/typecast.h"
 #include "logger/kernel_time_trace.hpp"
 #include "nn/attention/attention_kernel.h"
+#include "logger/std_log_op.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -69,10 +70,22 @@ void test_mq_rag_buffer1(Context &ctx, size_t batch, size_t len_q, vector<int> l
             nn::multi_query_attention_rag_buffer(
                 ctx, q, buf_lens, key_buf_addrs, val_buf_addrs, mask, scale, max_len_buf, output, m_query, algo_id);
         } else if (m_query == 1) {
+            nn::attention_qkv_rag_buffer(
+                ctx, q, buf_lens, key_buf_addrs, val_buf_addrs, mask, Tensor(), scale, max_len_buf, output);
         } else {
             throw std::runtime_error("invalid m_query");
         }
     }
+
+    float elapsed_ms = logger::destroyDiffEvent(start, stop, stream);
+    std::cout << std::setprecision(4)
+              << "attention take " << (elapsed_ms * 1000 / float(round)) << "us"
+              << ", ALGO=" << algo_id
+              << ", batch=" << batch
+              << ", len_q=" << len_q
+              << ", num_kv_heads=" << num_kv_heads
+              << ", len_buf=" << lens
+              << std::endl;
 }
 
 int main() {
