@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CUDA_PATH "/usr/local/cuda")
 set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
 
-set(CMAKE_CUDA_ARCHITECTURES "75;80;86")
+set(CMAKE_CUDA_ARCHITECTURES "80;86")
 
 # CUTLASS 头文件
 set(CUTLASS_HEADER_DIR ${PROJECT_SOURCE_DIR}/3rdparty/cutlass/include)

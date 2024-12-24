@@ -9,3 +9,6 @@ gpt_example.log
 log
 script/__pycache__
 llms/zhilight/.cache/clangd/index
+llms/zhilight/__pycache__
+llms/zhilight/dist
+llms/zhilight/zhillm.egg-info

@@ -95,6 +95,14 @@ int main() {
     auto ctx = engine.create_context();
     auto with_dev = ctx.with_device(0);
 
-    test_mq_rag_buffer1(ctx, 1, 1, {1024}, 1, 8, 128, 0, 5000);
+    // test_mq_rag_buffer1(ctx, 1, 1, {1024}, 1, 8, 128, 0, 5000);
+
+    for (int b = 1; b <= 5; ++b) {
+        for (int len_q = 1; len_q < 2; ++len_q) {
+            test_mq_rag_buffer1(ctx, b, len_q, {4096, 123}, 4, 4, 128, 1, 5000);
+        }
+    }
+    // test_self_attention(ctx, 1500, 1536, 4, 0, 2);
+
     return 0;
 }
