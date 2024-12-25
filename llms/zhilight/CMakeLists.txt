@@ -8,15 +8,17 @@ enable_language(CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
+
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+set(PYTHON_EXECUTABLE ${Python_EXECUTABLE})
+set(PYTHON_VERSION ${Python_VERSION})
 
 option(WITH_TESTING "Compile with unit testing" ON)
 
 # set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
-add_subdirectory(src)
-add_subdirectory(tests)
 
 if(WITH_TESTING)
 	execute_process(
@@ -31,7 +33,6 @@ if(WITH_TESTING)
     message("CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS}")
 endif()
 
-
 execute_process(
 	COMMAND ${PYTHON_EXECUTABLE} -c "import pybind11; \
 		print(pybind11.get_cmake_dir())"
@@ -44,13 +45,14 @@ file(GLOB_RECURSE PYBIND_SOURCES "src/py_export/*.cpp")
 pybind11_add_module(C ${PYBIND_SOURCES})
 target_compile_definitions(C PRIVATE VERSION_INFO=${EXAMPLE_VERSION_INFO})
 
+add_subdirectory(src)
+add_subdirectory(tests)
 
 target_link_libraries(C PRIVATE
     # bmengine
     "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions"
     "pthread"
 )
-
 
 if (WITH_TESTING)
     add_subdirectory(tests/py_export_internal)

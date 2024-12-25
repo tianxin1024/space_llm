@@ -155,4 +155,5 @@ void define_layer_embedding(py::module_ &layers_m) {
         .def("named_parameters", &PyEmbedding::named_parameters)
         .def("forward", &PyEmbedding::forward);
 }
+
 } // namespace bind

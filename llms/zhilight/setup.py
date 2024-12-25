@@ -27,8 +27,9 @@ class CMakeBuild(build_ext):
         if not extdir.endswith(os.path.sep):
             extdir += os.path.sep
 
-        debug = int(os.environ.get("DEBUG", 0)) if self.debug is None else self.debug
-        cfg = "RelWithDebInfo" if debug else "Release"
+        debug = int(os.environ.get("DEBUG", 1)) if self.debug is None else self.debug
+        # cfg = "RelWithDebInfo" if debug else "Release"
+        cfg = "Debug" if debug else "Release"
         testing = int(os.environ.get("TESTING", 1))
         testing_cfg = "ON" if testing else "OFF"
 
