@@ -14,3 +14,4 @@ llms/zhilight/dist
 llms/zhilight/zhillm.egg-info
 llms/zhilight/zhillm/__pycache__
 llms/zhilight/zhillm/C.cpython-310-x86_64-linux-gnu.so
+llms/zhilight/zhillm/space.cpython-310-x86_64-linux-gnu.so

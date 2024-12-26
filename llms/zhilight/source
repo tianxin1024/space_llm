@@ -1,6 +1,8 @@
 #!/bin/bash
 
 export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:${PWD}/src
+export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:${PWD}/src/space_llm
+export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:${PWD}/src/py_export
 export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:${PWD}/test
-# export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:${HOME}/anaconda3/lib/python3.9/site-packages/torch/include
+export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:${HOME}/miniconda3/envs/tx/lib/python3.10/site-packages/pybind11/include
 # export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH=${HOME}/anaconda3/lib/python3.9/site-packages/torch/include/torch/csrc/api/include

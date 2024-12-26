@@ -9,7 +9,6 @@ from setuptools.command.build_ext import build_ext
 
 from version import __version__
 
-
 ROOT_DIR = os.path.dirname(__file__)
 
 class CMakeExtension(Extension):
@@ -107,13 +106,13 @@ class CMakeBuild(build_ext):
 
 
 ext_modules = [
-    CMakeExtension("zhillm.C", "C"),
+    CMakeExtension("zhillm.space", "space"),
 ]
 
-testing = int(os.environ.get("TESTING", 1))
+# testing = int(os.environ.get("TESTING", 1))
 
-if testing:
-    ext_modules.append(CMakeExtension("zhillm.C", "internals_"))
+# if testing:
+#     ext_modules.append(CMakeExtension("zhillm.C", "space"))
 
 def get_path(*filepath) -> str:
     return os.path.join(ROOT_DIR, *filepath)

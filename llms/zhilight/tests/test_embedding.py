@@ -2,7 +2,7 @@ import torch
 
 import zhillm
 
-from zhillm.internals_ import layers
+from zhillm.space import layers
 
 def test_embedding(SIZE, BATCH, SEQLEN, SCALE):
     rtol, atol = (1e-3, 3e-4)
